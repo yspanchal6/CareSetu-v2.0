@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CareSetu — Offline</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, sans-serif;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        min-height: 100vh; margin: 0; padding: 1.5rem;
+        background: #f8fafc; color: #0f172a; text-align: center;
+      }
+      .box { max-width: 420px; }
+      h1 { font-size: 1.5rem; font-weight: 800; margin: 0; }
+      p { color: #64748b; font-size: 0.9rem; margin: 0.75rem 0 1.5rem; line-height: 1.5; }
+      a { display: block; padding: 0.9rem 1rem; border-radius: 0.75rem; color: #fff; font-weight: 700; font-size: 0.95rem; text-decoration: none; }
+      .emergency { background: #dc2626; }
+      .fallback { background: #d97706; margin-top: 0.75rem; }
+    </style>
+  </head>
+  <body>
+    <div class="box">
+      <h1>You're offline</h1>
+      <p>CareSetu needs an internet connection to match you with hospitals. If this is an emergency, reach out on the emergency lines below.</p>
+      <a href="tel:108" class="emergency">Call 108 — Emergency Ambulance</a>
+      <a href="tel:112" class="fallback">Call 112 — National Emergency</a>
+    </div>
+  </body>
+</html>

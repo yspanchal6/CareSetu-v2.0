@@ -1,0 +1,66 @@
+[
+  {
+    "id": "med_kb_001",
+    "topic": "fever_management",
+    "keywords": ["fever", "high temperature", "chills", "sweating", "pyrexia", "body heat"],
+    "title": "Clinical Guidance for Managing Fever",
+    "content": "For mild to moderate fever, maintain adequate oral hydration with water or oral rehydration solutions, get plenty of rest, and wear lightweight clothing. Monitor body temperature regularly. Seek immediate medical evaluation if fever exceeds 102°F (38.9°C), persists for longer than 48 hours, or is accompanied by severe headache, neck stiffness, or confusion.",
+    "source": "CareSetu Clinical Reference Protocol v1.2"
+  },
+  {
+    "id": "med_kb_002",
+    "topic": "headache_care",
+    "keywords": ["headache", "migraine", "head pain", "throbbing head", "tension headache"],
+    "title": "Headache Care and Red-Flag Warnings",
+    "content": "Tension headaches and mild stress-related head pain usually respond well to quiet rest in a dim room, hydration, and stress reduction. Seek emergency care immediately if a headache occurs suddenly with severe pain ('thunderclap'), or is accompanied by slurred speech, facial numbness, high fever, or neck rigidity.",
+    "source": "CareSetu General Neurological Guidelines"
+  },
+  {
+    "id": "med_kb_003",
+    "topic": "cough_respiratory",
+    "keywords": ["cough", "throat irritation", "bronchitis", "phlegm", "dry cough", "wet cough"],
+    "title": "Managing Viral Coughs and Upper Respiratory Symptoms",
+    "content": "Acute coughs following viral upper respiratory infections typically resolve within 1 to 2 weeks. Warm fluids, steam inhalation, and throat lozenges can help soothe irritation. Medical review is indicated if coughing lasts longer than 3 weeks, produces blood-stained sputum, or is accompanied by shortness of breath or high fever.",
+    "source": "CareSetu Respiratory Care Protocol"
+  },
+  {
+    "id": "med_kb_004",
+    "topic": "cardiac_awareness",
+    "keywords": ["chest pain", "angina", "heart attack", "cardiac", "chest pressure", "arm pain"],
+    "title": "Emergency Protocol for Suspected Cardiac Events",
+    "content": "Chest pain, heavy chest tightness, or pain radiating to the left arm or jaw is a medical emergency requiring immediate 108/112 emergency services. Do not delay emergency assistance. Resting and staying calm while emergency help is dispatched is vital.",
+    "source": "CareSetu Emergency SOS Protocol"
+  },
+  {
+    "id": "med_kb_005",
+    "topic": "digestive_care",
+    "keywords": ["indigestion", "heartburn", "acid reflux", "nausea", "stomach ache", "bloating"],
+    "title": "Managing Indigestion and Mild Gastric Discomfort",
+    "content": "Mild indigestion and heartburn can often be mitigated by avoiding large or greasy meals, remaining upright for 2 to 3 hours after eating, and avoiding known dietary triggers. Consult a doctor if abdominal pain is severe, constant, or accompanied by persistent vomiting or dark stools.",
+    "source": "CareSetu Gastroenterology Reference Sheet"
+  },
+  {
+    "id": "med_kb_006",
+    "topic": "seasonal_allergies",
+    "keywords": ["allergy", "allergies", "sneezing", "runny nose", "itchy eyes", "pollen"],
+    "title": "Guidance on Managing Seasonal Allergies",
+    "content": "Seasonal allergic rhinitis can be managed by minimizing exposure to airborne allergens, using saline nasal rinses, and staying indoors during high pollen periods. Over-the-counter antihistamines should be discussed with a pharmacist or physician before starting.",
+    "source": "CareSetu Allergy & Immunology Reference Protocol"
+  },
+  {
+    "id": "med_kb_007",
+    "topic": "first_aid_minor",
+    "keywords": ["first aid", "cut", "wound", "minor burn", "sprain", "bandage", "bleeding"],
+    "title": "First-Aid Instructions for Minor Injuries",
+    "content": "For minor cuts, wash thoroughly with clean water and mild soap, apply gentle pressure with a clean cloth to stop bleeding, and cover with a sterile bandage. For minor burns, cool under cold running water for 10-15 minutes. Deep wounds or uncontrolled bleeding require emergency review.",
+    "source": "CareSetu First Aid Standard Guidance"
+  },
+  {
+    "id": "med_kb_008",
+    "topic": "medication_safety",
+    "keywords": ["medication", "prescription", "dosage", "pills", "drug interaction", "antibiotic"],
+    "title": "Safe Medication Adherence and Professional Supervision",
+    "content": "Prescription medications must always be taken strictly as prescribed by a licensed healthcare professional. Never alter, stop, or combine prescription drugs without explicit medical consultation. Pharmacists provide guidance on drug interactions and proper timing.",
+    "source": "CareSetu Pharmacology Safety Standards"
+  }
+]

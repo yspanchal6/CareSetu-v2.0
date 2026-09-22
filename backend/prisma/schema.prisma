@@ -1,0 +1,969 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum Role {
+  PATIENT
+  HOSPITAL
+  DOCTOR
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+  PENDING
+}
+
+enum CaseStatus {
+  PENDING
+  MATCHING
+  HOSPITAL_REQUESTED
+  ACCEPTED
+  TRANSFER
+  TREATMENT
+  IN_PROGRESS
+  CLOSED
+  CANCELLED
+}
+
+enum EmergencySeverity {
+  RED
+  ORANGE
+  YELLOW
+  GREEN
+}
+
+enum EmergencyType {
+  MEDICAL
+  ACCIDENT
+  CARDIAC
+  BREATHING
+  TRAUMA
+  POISONING
+  OTHER
+}
+
+enum HospitalRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  CANCELLED
+}
+
+enum HealthPackStatus {
+  ACTIVE
+  ARCHIVED
+  EXPIRED
+}
+
+enum HealthPackShareStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum DocumentProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum ConversationStatus {
+  ACTIVE
+  CLOSED
+  ARCHIVED
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum AIIntent {
+  GENERAL_HEALTH
+  SYMPTOM_CHECK
+  EMERGENCY
+  MEDICATION
+  FIRST_AID
+  HOSPITAL_SEARCH
+  HEALTH_PACK
+  APPOINTMENT
+  OTHER
+}
+
+enum AIRiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+  UNKNOWN
+}
+
+enum SafetyDecision {
+  NORMAL
+  CAUTION
+  EMERGENCY
+  UNKNOWN
+}
+
+enum NotificationType {
+  SOS
+  HOSPITAL_REQUEST
+  HOSPITAL_ACCEPTED
+  HOSPITAL_REJECTED
+  HEALTH_PACK_SHARED
+  HEALTH_PACK_EXPIRING
+  SYSTEM
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  EXPIRED
+}
+
+enum ConsentType {
+  HEALTH_PACK_SHARE
+  MEDICAL_DATA_ACCESS
+  AI_PROCESSING
+  LOCATION_ACCESS
+  EMERGENCY_DATA_SHARE
+}
+
+enum ConsentStatus {
+  GRANTED
+  REVOKED
+  EXPIRED
+}
+
+enum AuditAction {
+  REGISTER
+  LOGIN
+  LOGOUT
+  PASSWORD_RESET
+  PROFILE_CREATED
+  PROFILE_UPDATED
+
+  CHAT_STARTED
+  CHAT_MESSAGE
+  AI_ANALYSIS
+
+  SOS_TRIGGERED
+  EMERGENCY_CREATED
+  EMERGENCY_UPDATED
+  EMERGENCY_CLOSED
+
+  HOSPITAL_MATCHING
+  HOSPITAL_REQUESTED
+  HOSPITAL_ACCEPTED
+  HOSPITAL_REJECTED
+
+  HEALTH_PACK_CREATED
+  HEALTH_PACK_UPDATED
+  HEALTH_PACK_SHARED
+  HEALTH_PACK_VIEWED
+  HEALTH_PACK_REVOKED
+
+  DOCUMENT_UPLOADED
+  DOCUMENT_PROCESSED
+
+  CONSENT_GRANTED
+  CONSENT_REVOKED
+
+  ADMIN_ACTION
+  DATA_ACCESS
+  DATA_EXPORT
+  SECURITY_EVENT
+}
+
+enum LocationSource {
+  GPS
+  MANUAL
+  NETWORK
+  CACHED
+}
+
+enum SyncStatus {
+  PENDING
+  SYNCED
+  FAILED
+}
+
+// ============================================================
+// USER
+// ============================================================
+
+model User {
+  id String @id @default(uuid())
+
+  name     String?
+  email    String @unique
+  password String
+
+  role   Role       @default(PATIENT)
+  status UserStatus @default(ACTIVE)
+
+  isVerified Boolean @default(false)
+
+  lastLoginAt DateTime?
+
+  notificationPreferences Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  patient  Patient?
+  hospital Hospital?
+
+  conversations Conversation[]
+  notifications Notification[]
+  consents       Consent[]
+  auditLogs      AuditLog[]
+  fcmTokens      FcmToken[]
+
+  restrictionsCreated AccountRestriction[] @relation("RestrictionsCreated")
+  restrictionsRevoked AccountRestriction[] @relation("RestrictionsRevoked")
+  pendingCredentialChanges PendingCredentialChange[]
+
+  @@index([email])
+  @@index([role])
+  @@index([status])
+
+  @@map("users")
+}
+
+// ============================================================
+// PATIENT
+// ============================================================
+
+model Patient {
+  id String @id @default(uuid())
+
+  userId String @unique
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name   String
+  age    Int
+  gender String
+  phone  String
+
+  bloodGroup String?
+
+  allergies         String?
+  medicalConditions String?
+  conditions        String?
+  heartCondition    String? @default("UNKNOWN")
+  diabetesStatus    String? @default("UNKNOWN")
+  hypertensionStatus String? @default("UNKNOWN")
+  medications       String?
+
+  emergencyContacts Json?
+
+  location Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  emergencyCases EmergencyCase[]
+  healthPacks    HealthPack[]
+  documents      MedicalDocument[]
+
+  locations PatientLocation[]
+
+  @@index([userId])
+  @@index([phone])
+
+  @@map("patients")
+}
+
+// ============================================================
+// PATIENT LOCATION HISTORY
+// ============================================================
+
+model PatientLocation {
+  id String @id @default(uuid())
+
+  patientId String
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  latitude  Float
+  longitude Float
+
+  accuracy Float?
+
+  source LocationSource @default(GPS)
+
+  createdAt DateTime @default(now())
+
+  @@index([patientId])
+  @@index([createdAt])
+
+  @@map("patient_locations")
+}
+
+// ============================================================
+// HOSPITAL
+// ============================================================
+
+model Hospital {
+  id String @id @default(uuid())
+
+  userId String @unique
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name    String
+  address String
+  phone   String
+
+  email String?
+  city  String?
+  state String?
+
+  capabilities String[]
+
+  emergencyAvailable Boolean @default(true)
+
+  location Json
+
+  isVerified Boolean @default(false)
+
+  hasEmergencyDepartment Boolean @default(true)
+  hasICU                 Boolean @default(false)
+  hasTraumaUnit          Boolean @default(false)
+  hasCardiology          Boolean @default(false)
+  hasNeurology           Boolean @default(false)
+  hasAmbulance           Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  emergencyCases  EmergencyCase[]
+  hospitalRequests HospitalRequest[]
+
+  @@index([userId])
+  @@index([emergencyAvailable])
+  @@index([isVerified])
+
+  @@map("hospitals")
+}
+
+// ============================================================
+// AI CHAT CONVERSATION
+// ============================================================
+
+model Conversation {
+  id String @id @default(uuid())
+
+  userId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title String?
+
+  status ConversationStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages AIMessage[]
+
+  analyses AIAnalysis[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+
+  @@map("conversations")
+}
+
+// ============================================================
+// AI CHAT MESSAGE
+// ============================================================
+
+model AIMessage {
+  id String @id @default(uuid())
+
+  conversationId String
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  role MessageRole
+
+  content String
+
+  createdAt DateTime @default(now())
+
+  @@index([conversationId])
+  @@index([createdAt])
+
+  @@map("ai_messages")
+}
+
+// ============================================================
+// AI ANALYSIS
+// ============================================================
+//
+// Stores structured output from AI processing.
+//
+// AI itself does NOT directly trigger SOS.
+// Safety Rule Engine makes the final emergency decision.
+//
+
+model AIAnalysis {
+  id String @id @default(uuid())
+
+  conversationId String
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  intent AIIntent?
+
+  riskLevel AIRiskLevel @default(UNKNOWN)
+
+  safetyDecision SafetyDecision @default(UNKNOWN)
+
+  symptoms String[]
+
+  detectedWords String[]
+
+  emergencySignals String[]
+
+  extractedEntities Json?
+
+  ragUsed Boolean @default(false)
+
+  confidence Float?
+
+  modelName String?
+
+  processingTimeMs Int?
+
+  createdAt DateTime @default(now())
+
+  @@index([conversationId])
+  @@index([riskLevel])
+  @@index([safetyDecision])
+  @@index([createdAt])
+
+  @@map("ai_analyses")
+}
+
+// ============================================================
+// HEALTHCARE KNOWLEDGE DOCUMENT
+// ============================================================
+//
+// Used for RAG.
+//
+// Approved healthcare information can be stored/indexed here.
+//
+
+model KnowledgeDocument {
+  id String @id @default(uuid())
+
+  title String
+
+  source String?
+
+  category String?
+
+  content String
+
+  version String?
+
+  isApproved Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  chunks KnowledgeChunk[]
+
+  @@index([category])
+  @@index([isApproved])
+
+  @@map("knowledge_documents")
+}
+
+// ============================================================
+// RAG DOCUMENT CHUNK
+// ============================================================
+
+model KnowledgeChunk {
+  id String @id @default(uuid())
+
+  documentId String
+
+  document KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  content String
+
+  // Embedding storage can later use pgvector.
+  // Keep this field flexible during MVP development.
+  embedding Json?
+
+  chunkIndex Int
+
+  createdAt DateTime @default(now())
+
+  @@index([documentId])
+  @@index([chunkIndex])
+
+  @@map("knowledge_chunks")
+}
+
+// ============================================================
+// EMERGENCY CASE / SOS
+// ============================================================
+
+model EmergencyCase {
+  id String @id @default(uuid())
+
+  // Public readable case ID
+  // Example: CASE-20260908-AB12
+  caseId String @unique
+
+  // Prevent duplicate requests during offline synchronization
+  idempotencyKey String? @unique
+
+  patientId String
+
+  patient Patient @relation(fields: [patientId], references: [id])
+
+  // Assigned hospital
+  hospitalId String?
+
+  hospital Hospital? @relation(fields: [hospitalId], references: [id])
+
+  status CaseStatus @default(PENDING)
+
+  severity EmergencySeverity?
+
+  emergencyType EmergencyType @default(MEDICAL)
+
+  symptoms String
+
+  location Json
+
+  // AI/Safety Engine information
+  detectedWords String[]
+
+  aiRiskLevel String?
+
+  aiEmergencySignal Boolean @default(false)
+
+  aiReason String?
+
+  // Medical History Snapshot at SOS Creation
+  medicalSummary Json?
+
+  // SOS source
+  source String?
+
+  // Offline sync
+  syncStatus SyncStatus @default(SYNCED)
+
+  acceptedAt DateTime?
+
+  closedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  hospitalRequests HospitalRequest[]
+
+  @@index([caseId])
+  @@index([patientId])
+  @@index([hospitalId])
+  @@index([status])
+  @@index([severity])
+  @@index([emergencyType])
+  @@index([createdAt])
+
+  @@map("emergency_cases")
+}
+
+// ============================================================
+// HOSPITAL REQUEST
+// ============================================================
+
+model HospitalRequest {
+  id String @id @default(uuid())
+
+  emergencyCaseId String
+  hospitalId      String
+
+  emergencyCase EmergencyCase @relation(fields: [emergencyCaseId], references: [id], onDelete: Cascade)
+
+  hospital Hospital @relation(fields: [hospitalId], references: [id])
+
+  status HospitalRequestStatus @default(PENDING)
+
+  distanceKm Float?
+
+  capabilityMatched Boolean @default(false)
+
+  availabilityMatched Boolean @default(false)
+
+  matchScore Float?
+
+  requestedAt DateTime @default(now())
+
+  respondedAt DateTime?
+
+  rejectionReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([emergencyCaseId, hospitalId])
+
+  @@index([emergencyCaseId])
+  @@index([hospitalId])
+  @@index([status])
+  @@index([requestedAt])
+
+  @@map("hospital_requests")
+}
+
+// ============================================================
+// HEALTH PACK
+// ============================================================
+
+model HealthPack {
+  id String @id @default(uuid())
+
+  patientId String
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  // Encrypted health information
+  encryptedData String
+
+  // Initialization Vector
+  iv String
+
+  status HealthPackStatus @default(ACTIVE)
+
+  expiresAt DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  documents MedicalDocument[]
+
+  shares HealthPackShare[]
+
+  @@index([patientId])
+  @@index([status])
+  @@index([expiresAt])
+
+  @@map("health_packs")
+}
+
+// ============================================================
+// HEALTH PACK SHARING
+// ============================================================
+//
+// Controls exactly who can access a Health Pack.
+//
+// ============================================================
+
+model HealthPackShare {
+  id String @id @default(uuid())
+
+  healthPackId String
+
+  healthPack HealthPack @relation(fields: [healthPackId], references: [id], onDelete: Cascade)
+
+  // Hospital/User receiving access
+  sharedWithUserId String?
+
+  sharedWithHospitalId String?
+
+  status HealthPackShareStatus @default(ACTIVE)
+
+  consentGranted Boolean @default(false)
+
+  sharedAt DateTime @default(now())
+
+  expiresAt DateTime?
+
+  revokedAt DateTime?
+
+  @@index([healthPackId])
+  @@index([sharedWithUserId])
+  @@index([sharedWithHospitalId])
+  @@index([status])
+
+  @@map("health_pack_shares")
+}
+
+// ============================================================
+// MEDICAL DOCUMENT
+// ============================================================
+
+model MedicalDocument {
+  id String @id @default(uuid())
+
+  patientId String?
+
+  patient Patient? @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  healthPackId String?
+
+  healthPack HealthPack? @relation(fields: [healthPackId], references: [id], onDelete: SetNull)
+
+  fileName String
+
+  fileUrl String
+
+  fileType String?
+
+  fileSize Int?
+
+  documentType String? @default("OTHER")
+
+  processingStatus DocumentProcessingStatus @default(PENDING)
+
+  extractedText String?
+
+  extractedConditions String?
+
+  extractedMedications String?
+
+  extractedAllergies String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([patientId])
+  @@index([healthPackId])
+  @@index([processingStatus])
+
+  @@map("medical_documents")
+}
+
+// ============================================================
+// CONSENT
+// ============================================================
+
+model Consent {
+  id String @id @default(uuid())
+
+  userId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type ConsentType
+
+  status ConsentStatus @default(GRANTED)
+
+  purpose String?
+
+  grantedAt DateTime @default(now())
+
+  revokedAt DateTime?
+
+  expiresAt DateTime?
+
+  @@index([userId])
+  @@index([type])
+  @@index([status])
+
+  @@map("consents")
+}
+
+// ============================================================
+// NOTIFICATIONS
+// ============================================================
+
+model Notification {
+  id String @id @default(uuid())
+
+  userId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type NotificationType
+
+  title String
+
+  message String
+
+  status NotificationStatus @default(UNREAD)
+
+  data Json?
+
+  createdAt DateTime @default(now())
+  readAt DateTime?
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+
+  @@map("notifications")
+}
+
+// ============================================================
+// AUDIT LOG
+// ============================================================
+
+model AuditLog {
+  id String @id @default(uuid())
+
+  userId String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  action AuditAction
+
+  entity String?
+
+  entityId String?
+
+  endpoint String?
+
+  ipAddress String?
+
+  userAgent String?
+
+  details Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([entity, entityId])
+  @@index([createdAt])
+
+  @@map("audit_logs")
+}
+
+// ============================================================
+// AUTH & OTP
+// ============================================================
+model Otp {
+  id String @id @default(uuid())
+  identifier String
+  otpHash String
+  purpose String
+  expiresAt DateTime
+  verifiedAt DateTime?
+  attemptCount Int @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([identifier])
+  @@map("otps")
+}
+
+// ============================================================
+// FCM TOKEN
+// ============================================================
+
+model FcmToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  platform  String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([token])
+  @@map("fcm_tokens")
+}
+
+// ============================================================
+// ACCOUNT RESTRICTIONS / BLOCKLIST
+// ============================================================
+
+enum RestrictionStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum RestrictionTargetType {
+  PATIENT
+  HOSPITAL
+}
+
+model AccountRestriction {
+  id           String                @id @default(uuid())
+  targetUserId String
+  targetType   RestrictionTargetType
+  status       RestrictionStatus     @default(ACTIVE)
+  reason       String
+  createdBy    String
+  createdByUser User                 @relation("RestrictionsCreated", fields: [createdBy], references: [id], onDelete: Cascade)
+  createdAt    DateTime              @default(now())
+  expiresAt    DateTime?
+  revokedAt    DateTime?
+  revokedBy    String?
+  revokedByUser User?                @relation("RestrictionsRevoked", fields: [revokedBy], references: [id], onDelete: SetNull)
+
+  @@index([targetUserId])
+  @@index([targetType])
+  @@index([status])
+  @@index([createdBy])
+
+  @@map("account_restrictions")
+}
+
+// ============================================================
+// PENDING CREDENTIAL CHANGES (EMAIL / MOBILE)
+// ============================================================
+
+enum CredentialType {
+  EMAIL
+  MOBILE
+}
+
+enum PendingChangeStatus {
+  PENDING
+  VERIFIED
+  CONSUMED
+  CANCELLED
+  EXPIRED
+}
+
+model PendingCredentialChange {
+  id           String              @id @default(uuid())
+  userId       String
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         CredentialType
+  newValue     String
+  otpHash      String
+  expiresAt    DateTime
+  attemptCount Int                 @default(0)
+  maxAttempts  Int                 @default(5)
+  status       PendingChangeStatus @default(PENDING)
+  consumedAt   DateTime?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([userId])
+  @@index([type])
+  @@index([status])
+
+  @@map("pending_credential_changes")
+}
+
+

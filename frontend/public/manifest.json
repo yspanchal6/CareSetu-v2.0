@@ -1,0 +1,16 @@
+{
+  "name": "CareSetu",
+  "short_name": "CareSetu",
+  "description": "Right Care. Right Time. Right Place.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0ea5e9",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    }
+  ]
+}

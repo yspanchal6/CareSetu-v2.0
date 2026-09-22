@@ -1,0 +1,164 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; }
+body {
+  background: #F8FAFC;
+  color: #1E293B;
+  font-family: "Manrope", "Inter", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+* { box-sizing: border-box; }
+
+:focus-visible {
+  outline: 2px solid #38BDF8;
+  outline-offset: 2px;
+}
+
+.scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 999px; }
+
+@keyframes slideUp {
+  from { transform: translate(-50%, 30px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+@keyframes pulseRing {
+  0%, 100% { transform: scale(1); opacity: 0.4; }
+  50% { transform: scale(1.15); opacity: 0; }
+}
+
+.animate-slideUp { animation: slideUp 0.3s ease-out; }
+.animate-pulseRing { animation: pulseRing 2s ease-in-out infinite; }
+
+/* ─── Emergency workflow animations ─────────────────────────── */
+
+/* Red rejection shake */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+.animate-shake { animation: shake 0.5s ease-in-out; }
+
+/* Blue active pulse (expanding ripple around active stage circle) */
+@keyframes bluePulse {
+  0% { transform: scale(1); opacity: 0.6; }
+  70% { transform: scale(1.6); opacity: 0; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+.animate-blue-pulse::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 2px solid #0ea5e9;
+  animation: bluePulse 1.6s ease-out infinite;
+}
+
+/* Radar / radius expansion during hospital search */
+@keyframes radiusExpand {
+  0% { transform: scale(0.2); opacity: 0.7; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+.animate-radius-expand {
+  animation: radiusExpand 2s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+  transform-origin: center;
+}
+
+/* Green success check pop */
+@keyframes checkPop {
+  0% { transform: scale(0.4); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.animate-check-pop { animation: checkPop 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+
+/* Red X error pop */
+@keyframes xPop {
+  0% { transform: scale(0.4) rotate(-30deg); opacity: 0; }
+  60% { transform: scale(1.15) rotate(6deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+.animate-x-pop { animation: xPop 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+
+/* Heartbeat — subtle medical monitoring */
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); }
+  14% { transform: scale(1.15); }
+  28% { transform: scale(1.05); }
+  42% { transform: scale(1.15); }
+  70% { transform: scale(1); }
+}
+.animate-heartbeat { animation: heartbeat 1.2s ease-in-out infinite; }
+
+/* Treatment ECG line sweep */
+@keyframes ecgSweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.animate-ecg { animation: ecgSweep 2.4s linear infinite; }
+
+/* Ambulance movement during transfer */
+@keyframes ambulanceMove {
+  0% { transform: translateX(-12%) scaleX(-1); }
+  100% { transform: translateX(12%) scaleX(-1); }
+}
+.animate-ambulance { animation: ambulanceMove 2.2s ease-in-out infinite alternate; }
+
+/* Dashed route line dash offset animation */
+@keyframes routeDash {
+  to { stroke-dashoffset: -24; }
+}
+.animate-route { animation: routeDash 1s linear infinite; }
+
+/* Soft fade-in for cards/states */
+@keyframes fadeInUp {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.animate-fade-in { animation: fadeInUp 0.35s ease-out both; }
+
+/* Hold-to-report progress sweep */
+@keyframes ringProgress {
+  from { stroke-dashoffset: 339.292; }
+  to { stroke-dashoffset: 0; }
+}
+.animate-ring-progress { animation: ringProgress linear forwards; }
+
+/* ─── Toggle & Field Animation Utilities ─────────────────── */
+@keyframes slideInRight {
+  from { transform: translateX(12px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideInLeft {
+  from { transform: translateX(-12px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes textFade {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-slide-in-right { animation: slideInRight 0.25s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-slide-in-left { animation: slideInLeft 0.25s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-text-fade { animation: textFade 0.2s ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-slide-in-right,
+  .animate-slide-in-left,
+  .animate-fade-in,
+  .animate-text-fade,
+  .animate-slideUp,
+  .animate-shake {
+    animation: none !important;
+    transition: none !important;
+  }
+}

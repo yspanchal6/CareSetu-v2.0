@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  postgres:
+    # Uses PostgreSQL 16 with PostGIS 3.4 to fulfill PRD spatial requirements
+    image: postgis/postgis:16-3.4
+    container_name: caresetu-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: caresetu
+      POSTGRES_PASSWORD: caresetu_dev_password
+      POSTGRES_DB: caresetu
+    ports:
+      - "5432:5432"
+    volumes:
+      # Ensures database records persist if the container restarts
+      - caresetu_postgres_data:/var/lib/postgresql/data
+
+  ai:
+    # Optional Slice 11 AI sidecar (safety passthrough + LLM chat generation).
+    build: ../ai
+    container_name: caresetu-ai
+    restart: unless-stopped
+    environment:
+      # LOOSE_AI_API_KEY: optional HuggingFace / OpenAI-compatible token
+      AI_API_KEY: ${AI_API_KEY:-}
+      HF_MODEL: ${HF_MODEL:-mistralai/Mistral-7B-Instruct-v0.3}
+      AI_BASE_URL: ${AI_BASE_URL:-https://api-inference.huggingface.co}
+    ports:
+      - "8001:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  caresetu_postgres_data:
