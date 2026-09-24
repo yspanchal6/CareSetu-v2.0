@@ -19,6 +19,7 @@ import { RoleSelectionPage, RegisterPage, VerifyOtpPage, ForgotPasswordPage, Res
 import DocumentVerificationPage from "./pages/auth/DocumentVerificationPage";
 
 import PatientDashboard from "./pages/patient/PatientDashboard";
+import PatientProfileCompletionPage from "./pages/patient/PatientProfileCompletionPage";
 import EmergencySOSPage from "./pages/patient/EmergencySOSPage";
 import EmergencyStatusPage from "./pages/patient/EmergencyStatusPage";
 import PatientHospitalsPage from "./pages/patient/PatientHospitalsPage";
@@ -37,6 +38,7 @@ import {
 } from "./pages/patient/PatientMiscPages";
 
 import HospitalDashboard from "./pages/hospital/HospitalDashboard";
+import HospitalProfileVerificationPage from "./pages/hospital/HospitalProfileVerificationPage";
 import { HospitalEmergenciesPage, HospitalEmergencyDetailPage, HospitalActiveCasesPage } from "./pages/hospital/HospitalEmergencyPages";
 import {
   HospitalMatchingRequestsPage,
@@ -109,6 +111,7 @@ export default function App() {
               }
             >
               <Route path="dashboard" element={<PatientDashboard />} />
+              <Route path="profile-completion" element={<PatientProfileCompletionPage />} />
               <Route path="profile" element={<PatientProfilePage />} />
               <Route path="medical-information" element={<MedicalInformationPage />} />
               <Route path="health-pack" element={<HealthPackPage />} />
@@ -137,6 +140,7 @@ export default function App() {
               }
             >
               <Route path="dashboard" element={<HospitalDashboard />} />
+              <Route path="profile-verification" element={<HospitalProfileVerificationPage />} />
               <Route path="emergencies" element={<HospitalEmergenciesPage />} />
               <Route path="emergencies/active" element={<HospitalActiveCasesPage />} />
               <Route path="emergencies/:id" element={<HospitalEmergencyDetailPage />} />
@@ -160,6 +164,7 @@ export default function App() {
               }
             >
               <Route path="dashboard" element={<DoctorDashboard />} />
+              <Route path="document-verification" element={<DocumentVerificationPage />} />
               <Route path="cases" element={<DoctorCasesPage />} />
               <Route path="cases/:id" element={<DoctorCaseDetailPage />} />
               <Route path="patients" element={<DoctorPatientsPage />} />

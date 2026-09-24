@@ -228,7 +228,7 @@ export async function runMasterSyncPass(apiClient: ApiClient): Promise<{
           await putRecord("contact_queue", item);
         } else {
           item.retryCount = (item.retryCount || 0) + 1;
-          item.syncStatus = item.retryCount >= MAX_RETRIES ? "FAILED" : "RETRY_WAIT";
+          item.syncStatus = "FAILED";
           await putRecord("contact_queue", item);
         }
       }

@@ -1,0 +1,198 @@
+{
+  "config": {
+    "argv": [
+      "C:\\Program Files\\nodejs\\node.exe",
+      "D:\\2_YASH\\SIH\\CareSetu\\CareSetu-demo\\frontend\\node_modules\\@playwright\\test\\cli.js",
+      "test",
+      "tests/e2e/critical-demo-scenario.spec.ts"
+    ],
+    "configFile": "D:\\2_YASH\\SIH\\CareSetu\\CareSetu-demo\\frontend\\playwright.config.ts",
+    "rootDir": "D:/2_YASH/SIH/CareSetu/CareSetu-demo/frontend/tests/e2e",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "D:/2_YASH/SIH/CareSetu/CareSetu-demo/frontend/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "D:/2_YASH/SIH/CareSetu/CareSetu-demo/frontend/tests/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "html",
+        {
+          "outputFolder": "../reports/html-report",
+          "open": "never"
+        }
+      ],
+      [
+        "json",
+        {
+          "outputFile": "../reports/playwright-results.json"
+        }
+      ],
+      [
+        "list",
+        null
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": {
+      "command": "npm run dev",
+      "url": "http://localhost:5173",
+      "reuseExistingServer": true,
+      "timeout": 120000
+    }
+  },
+  "suites": [
+    {
+      "title": "critical-demo-scenario.spec.ts",
+      "file": "critical-demo-scenario.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "CareSetu E2E Critical Demo Suite",
+          "file": "critical-demo-scenario.spec.ts",
+          "line": 18,
+          "column": 6,
+          "specs": [
+            {
+              "title": "CareSetu Critical Demo — Patient SOS → Hospital Acceptance → HealthPack",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 120000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 34568,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "[PASS] Patient Login (6451ms)\n"
+                        },
+                        {
+                          "text": "[PASS] Emergency SOS Trigger (4059ms)\n"
+                        },
+                        {
+                          "text": "[Dynamic Case ID Captured]: CASE-20260923-B72161\n"
+                        },
+                        {
+                          "text": "[PASS] Case Creation & ID Capture (371ms)\n"
+                        },
+                        {
+                          "text": "[PASS] Hospital Login (Second Browser Context) (4901ms)\n"
+                        },
+                        {
+                          "text": "[PASS] Locate Same Case ID in Hospital Portal (3040ms)\n"
+                        },
+                        {
+                          "text": "[PASS] Hospital Case Acceptance (5723ms)\n"
+                        },
+                        {
+                          "text": "[PASS] Health Pack Access (572ms)\n"
+                        },
+                        {
+                          "text": "[HealthPack Decrypted Content Extracted]:\n 🔒\nSecure Patient Health Pack\n\nAccess expires: 9/25/2026, 2:27:09 AM\n\n✕\nPATIENT PROFILE\n\nCareSetu Test Patient\n\nPatient ID: af9e8107-25c3-4ebd-aa22-bc5fe97088b2\n\nConsent Active\n🩸 BLOOD GROUP\n\nO+\n\n⚠️ ALLERGIES\n\nPenicillin, Peanuts\n\n💊 CURRENT MEDICATIONS\n\nAmlodipine 5mg daily\n\n🩺 CONFIRMED MEDICAL CONDITIONS & HISTORY\n\nHeart / Cardiac Status: NORMAL\n\nDiabetes Status: NO\n\nHypertension Status: YES\n\nConfirmed Conditions: Hypertension, Asthma\n\nSurgeries: None\n\nEmergency Notes: Emergency transfer patient profile verified.\n\n⚠️\n\nAccess Audit Logging Active\n\nEvery access to this Health Pack is recorded in immutable audit logs (HEALTH_PACK_VIEWED). Access is time-limited to 24 hours.\n\nClose\nPrint Summary\n"
+                        },
+                        {
+                          "text": "[PASS] Health Data & Patient Name Validation (429ms)\n"
+                        },
+                        {
+                          "text": "\n==================================================\n"
+                        },
+                        {
+                          "text": "CARESETU E2E TEST EXECUTION COMPLETED: PASS\n"
+                        },
+                        {
+                          "text": "JSON Report: D:\\2_YASH\\SIH\\CareSetu\\CareSetu-demo\\reports\\careSetu-critical-demo-report.json\n"
+                        },
+                        {
+                          "text": "HTML Report: D:\\2_YASH\\SIH\\CareSetu\\CareSetu-demo\\reports\\careSetu-critical-demo-report.html\n"
+                        },
+                        {
+                          "text": "==================================================\n\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-09-23T20:57:51.673Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "D:\\2_YASH\\SIH\\CareSetu\\CareSetu-demo\\frontend\\test-results\\critical-demo-scenario-Car-abf5b-tal-Acceptance-→-HealthPack-chromium\\test-finished-1.png"
+                        },
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "D:\\2_YASH\\SIH\\CareSetu\\CareSetu-demo\\frontend\\test-results\\critical-demo-scenario-Car-abf5b-tal-Acceptance-→-HealthPack-chromium\\test-finished-2.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "31af1cb38b2f4db2c96f-e7ce52a1a4bbc5a9d779",
+              "file": "critical-demo-scenario.spec.ts",
+              "line": 19,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-09-23T20:57:50.417Z",
+    "duration": 39690.737,
+    "expected": 1,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

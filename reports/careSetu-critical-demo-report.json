@@ -1,0 +1,73 @@
+{
+  "project": "CareSetu",
+  "scenario": "Critical Demo — Patient SOS → Hospital Acceptance → HealthPack",
+  "startedAt": "2026-09-23T20:57:52.731Z",
+  "finishedAt": "2026-09-23T20:58:27.283Z",
+  "durationMs": 34552,
+  "browser": "chromium",
+  "overallStatus": "PASS",
+  "caseId": "CASE-20260923-B72161",
+  "environment": {
+    "frontendUrl": "http://localhost:5173",
+    "backendUrl": "http://localhost:3000"
+  },
+  "steps": [
+    {
+      "name": "Patient Login",
+      "status": "PASS",
+      "durationMs": 6451
+    },
+    {
+      "name": "Emergency SOS Trigger",
+      "status": "PASS",
+      "durationMs": 4059
+    },
+    {
+      "name": "Case Creation & ID Capture",
+      "status": "PASS",
+      "durationMs": 371
+    },
+    {
+      "name": "Hospital Login (Second Browser Context)",
+      "status": "PASS",
+      "durationMs": 4901
+    },
+    {
+      "name": "Locate Same Case ID in Hospital Portal",
+      "status": "PASS",
+      "durationMs": 3040
+    },
+    {
+      "name": "Hospital Case Acceptance",
+      "status": "PASS",
+      "durationMs": 5723
+    },
+    {
+      "name": "Health Pack Access",
+      "status": "PASS",
+      "durationMs": 572
+    },
+    {
+      "name": "Health Data & Patient Name Validation",
+      "status": "PASS",
+      "durationMs": 429
+    }
+  ],
+  "consoleErrors": [],
+  "pageErrors": [],
+  "http4xx": [],
+  "http5xx": [],
+  "criticalErrors": [],
+  "artifacts": {
+    "screenshots": [
+      "screenshots/01-patient-login.png",
+      "screenshots/02-sos-triggered.png",
+      "screenshots/03-case-created.png",
+      "screenshots/04-hospital-case-found.png",
+      "screenshots/05-case-accepted.png",
+      "screenshots/06-healthpack-opened.png",
+      "screenshots/07-healthpack-validated.png"
+    ],
+    "trace": "reports/html-report"
+  }
+}

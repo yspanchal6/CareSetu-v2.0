@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Phone, MapPin, Users, Building2, ShieldCheck, BarChart3, Wifi, BrainCircuit } from "lucide-react";
 import { Card } from "../../components/common/Card";
 import { Input } from "../../components/common/Input";

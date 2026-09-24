@@ -14,9 +14,13 @@ const {
   getHospitalReports,
   getHospitalProfile,
   updateHospitalProfile,
+  submitHospitalOnboarding,
   getHospitalStaff,
   getHospitalSettings,
   updateHospitalSettings,
+  getHospitalDiagnostics,
+  getUnseenApprovalEvent,
+  consumeApprovalEvent,
 } = require('../controllers/hospital.controller');
 
 const router = express.Router();
@@ -29,6 +33,7 @@ router.use(auth, denyGuest);
 
 // Get nearest hospitals
 router.get('/nearest', findNearbyHospitals);
+router.get('/nearby', findNearbyHospitals);
 
 // Hospital operational routes (Requires HOSPITAL role)
 router.get('/cases', auth, authorize('HOSPITAL'), getHospitalCases);
@@ -41,11 +46,16 @@ router.put('/notifications/:id/read', auth, authorize('HOSPITAL'), markNotificat
 router.get('/reports', auth, authorize('HOSPITAL'), getHospitalReports);
 router.get('/profile', auth, authorize('HOSPITAL'), getHospitalProfile);
 router.put('/profile', auth, authorize('HOSPITAL'), updateHospitalProfile);
+router.post('/submit-onboarding', auth, authorize('HOSPITAL'), submitHospitalOnboarding);
 router.get('/staff', auth, authorize('HOSPITAL'), getHospitalStaff);
 router.get('/settings', auth, authorize('HOSPITAL'), getHospitalSettings);
 router.put('/settings', auth, authorize('HOSPITAL'), updateHospitalSettings);
+router.get('/diagnostics', auth, authorize('HOSPITAL', 'ADMIN'), getHospitalDiagnostics);
+router.get('/approval-event', auth, authorize('HOSPITAL'), getUnseenApprovalEvent);
+router.post('/approval-event/consume', auth, authorize('HOSPITAL'), consumeApprovalEvent);
 
 // Accept a case (Requires HOSPITAL role)
 router.post('/:caseId/accept', auth, authorize('HOSPITAL'), acceptCase);
+router.post('/cases/:caseId/accept', auth, authorize('HOSPITAL'), acceptCase);
 
 module.exports = router;

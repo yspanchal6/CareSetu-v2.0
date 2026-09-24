@@ -19,39 +19,49 @@ function distanceInKilometres(from, to) {
 
 exports.findNearbyHospitals = async (req, res, next) => {
   try {
-    const latitude = Number(req.query.lat);
-    const longitude = Number(req.query.lng);
+    const latitude = Number(req.query.lat ?? req.query.latitude);
+    const longitude = Number(req.query.lng ?? req.query.longitude);
+    const radiusKm = Math.min(200, Math.max(1, Number(req.query.radius ?? req.query.radiusKm ?? 25)));
+
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
-      return res.status(400).json({ error: 'A valid latitude and longitude are required.' });
+      return res.status(400).json({ error: 'A valid latitude (-90 to 90) and longitude (-180 to 180) are required.' });
     }
 
-    const hospitals = await prisma.hospital.findMany({
-      where: { emergencyAvailable: true },
-      select: { id: true, name: true, address: true, phone: true, capabilities: true, emergencyAvailable: true, location: true },
-    });
-    const origin = { latitude, longitude };
-    const nearbyHospitals = hospitals
-      .map((hospital) => {
-        const hospitalCoordinates = coordinates(hospital.location);
-        if (!hospitalCoordinates) return null;
-        const distanceKm = distanceInKilometres(origin, hospitalCoordinates);
-        return { hospital, distanceKm };
-      })
-      .filter(Boolean)
-      .filter(({ distanceKm }) => distanceKm <= 8)
-      .sort((first, second) => first.distanceKm - second.distanceKm)
-      .slice(0, 5)
-      .map(({ hospital, distanceKm }) => ({
-        id: hospital.id,
-        name: hospital.name,
-        address: hospital.address,
-        phone: hospital.phone,
-        capabilities: hospital.capabilities,
-        emergencyAvailable: hospital.emergencyAvailable,
-        distance: `${distanceKm.toFixed(2)} km`,
-      }));
+    const emergencyRepository = require('../repositories/emergency.repository');
+    const rawHospitals = await emergencyRepository.getActiveHospitalsInRadius(latitude, longitude, radiusKm);
 
-    res.json({ success: true, hospitals: nearbyHospitals });
+    const nearbyHospitals = rawHospitals.map((h) => {
+      const distKm = Number(h.distanceMeters || 0) / 1000;
+      return {
+        id: h.id,
+        name: h.name,
+        address: h.address,
+        phone: h.phone,
+        city: h.city || null,
+        capabilities: h.capabilities || [],
+        emergencyAvailable: Boolean(h.emergencyAvailable),
+        isVerified: Boolean(h.isVerified),
+        hasEmergencyDepartment: Boolean(h.hasEmergencyDepartment),
+        hasICU: Boolean(h.hasICU),
+        hasTraumaUnit: Boolean(h.hasTraumaUnit),
+        hasCardiology: Boolean(h.hasCardiology),
+        hasNeurology: Boolean(h.hasNeurology),
+        hasAmbulance: Boolean(h.hasAmbulance),
+        distanceKm: Number(distKm.toFixed(2)),
+        distance: `${distKm.toFixed(1)} km`,
+        location: {
+          latitude: Number(h.latitude),
+          longitude: Number(h.longitude),
+        },
+      };
+    });
+
+    res.json({
+      success: true,
+      hospitals: nearbyHospitals,
+      count: nearbyHospitals.length,
+      searchRadiusKm: radiusKm,
+    });
   } catch (error) {
     next(error);
   }
@@ -59,33 +69,114 @@ exports.findNearbyHospitals = async (req, res, next) => {
 
 exports.acceptCase = async (req, res, next) => {
   try {
+    const userId = req.user.userId || req.user.id;
     if (req.user.role !== 'HOSPITAL') {
       return res.status(403).json({ error: 'Only hospital accounts can accept an emergency case.' });
     }
 
-    const hospital = await prisma.hospital.findUnique({ where: { userId: req.user.userId } });
+    const hospital = await prisma.hospital.findUnique({ where: { userId } });
     if (!hospital) {
       return res.status(409).json({ error: 'Complete your hospital profile before accepting a case.' });
     }
 
-    const emergencyCase = await prisma.emergencyCase.findUnique({ where: { id: req.params.caseId } });
+    const caseIdParam = req.params.caseId;
+    const emergencyCase = await prisma.emergencyCase.findFirst({
+      where: { OR: [{ id: caseIdParam }, { caseId: caseIdParam }] },
+    });
     if (!emergencyCase) return res.status(404).json({ error: 'Case not found.' });
 
-    const claimed = await prisma.emergencyCase.updateMany({
-      where: {
-        id: emergencyCase.id,
-        status: { in: ['PENDING', 'MATCHING', 'HOSPITAL_REQUESTED'] },
-        OR: [{ hospitalId: null }, { hospitalId: hospital.id }],
-      },
-      data: { hospitalId: hospital.id, status: 'ACCEPTED', acceptedAt: new Date() },
-    });
+    await prisma.$transaction(async (tx) => {
+      // 1. Atomic claim check: prevent two hospitals from accepting the same case
+      const claimed = await tx.emergencyCase.updateMany({
+        where: {
+          id: emergencyCase.id,
+          status: { in: ['PENDING', 'MATCHING', 'HOSPITAL_REQUESTED'] },
+          OR: [{ hospitalId: null }, { hospitalId: hospital.id }],
+        },
+        data: { hospitalId: hospital.id, status: 'ACCEPTED', acceptedAt: new Date() },
+      });
 
-    if (claimed.count === 0) {
-      return res.status(409).json({ error: 'This case is no longer available to accept.' });
-    }
+      if (claimed.count === 0) {
+        const err = new Error('This case is no longer available to accept.');
+        err.status = 409;
+        throw err;
+      }
+
+      // 2. Update HospitalRequest if present
+      await tx.hospitalRequest.updateMany({
+        where: { emergencyCaseId: emergencyCase.id, hospitalId: hospital.id },
+        data: { status: 'ACCEPTED', respondedAt: new Date() },
+      });
+
+      // 3. Retrieve or auto-generate active HealthPack for patient within transaction
+      let healthPack = await tx.healthPack.findFirst({
+        where: { patientId: emergencyCase.patientId, status: 'ACTIVE' },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (!healthPack) {
+        const patient = await tx.patient.findUnique({ where: { id: emergencyCase.patientId } });
+        const { encrypt } = require('../utils/crypto');
+        const rawString = JSON.stringify({
+          bloodGroup: patient?.bloodGroup || 'NOT_PROVIDED',
+          allergies: patient?.allergies || 'NOT_PROVIDED',
+          medications: patient?.medications || 'NOT_PROVIDED',
+          conditions: patient?.conditions || patient?.medicalConditions || 'NOT_PROVIDED',
+          heartCondition: patient?.heartCondition || 'UNKNOWN',
+          diabetesStatus: patient?.diabetesStatus || 'UNKNOWN',
+          hypertensionStatus: patient?.hypertensionStatus || 'UNKNOWN',
+        });
+        const { iv, encryptedData } = encrypt(rawString);
+        const expiresAt = new Date();
+        expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+
+        healthPack = await tx.healthPack.create({
+          data: {
+            patientId: emergencyCase.patientId,
+            encryptedData,
+            iv,
+            status: 'ACTIVE',
+            expiresAt,
+          },
+        });
+      }
+
+      // 4. Ensure HealthPackShare exists for hospital UUID without modifying existing shares or creating duplicates
+      const existingShare = await tx.healthPackShare.findFirst({
+        where: {
+          healthPackId: healthPack.id,
+          sharedWithHospitalId: hospital.id,
+          status: 'ACTIVE',
+        },
+      });
+
+      const shareExpiresAt = new Date();
+      shareExpiresAt.setHours(shareExpiresAt.getHours() + 24);
+
+      if (!existingShare) {
+        await tx.healthPackShare.create({
+          data: {
+            healthPackId: healthPack.id,
+            sharedWithHospitalId: hospital.id,
+            sharedWithUserId: hospital.userId,
+            consentGranted: true,
+            status: 'ACTIVE',
+            expiresAt: shareExpiresAt,
+          },
+        });
+      } else if (existingShare.expiresAt && existingShare.expiresAt < new Date()) {
+        await tx.healthPackShare.update({
+          where: { id: existingShare.id },
+          data: { status: 'ACTIVE', expiresAt: shareExpiresAt },
+        });
+      }
+    });
 
     res.json({ success: true, message: 'Case accepted. Patient notified.' });
   } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ error: error.message });
+    }
     next(error);
   }
 };
@@ -93,7 +184,11 @@ exports.acceptCase = async (req, res, next) => {
 exports.getAllHospitals = async (req, res, next) => {
   try {
     const hospitals = await prisma.hospital.findMany({
-      where: { emergencyAvailable: true },
+      where: {
+        isVerified: true,
+        emergencyAvailable: true,
+        user: { status: 'ACTIVE' },
+      },
       select: {
         id: true,
         name: true,
@@ -517,12 +612,67 @@ exports.getHospitalReports = async (req, res, next) => {
 exports.getHospitalProfile = async (req, res, next) => {
   try {
     const userId = req.user.userId || req.user.id;
-    const hospital = await prisma.hospital.findUnique({
-      where: { userId },
-      include: { user: { select: { email: true } } },
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        hospital: true,
+      },
     });
-    if (!hospital) return res.status(404).json({ error: 'Hospital profile not found' });
-    res.json({ success: true, hospital });
+
+    if (!user || !user.hospital) {
+      return res.status(404).json({ error: 'Hospital profile not found' });
+    }
+
+    const auditLogs = await prisma.auditLog.findMany({
+      where: {
+        OR: [
+          { userId: user.id },
+          { entityId: user.hospital.id },
+          { entityId: user.id },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+
+    const parseDetails = (log) => {
+      if (!log || !log.details) return {};
+      if (typeof log.details === 'string') {
+        try { return JSON.parse(log.details); } catch { return {}; }
+      }
+      return log.details;
+    };
+
+    const parsedLogs = auditLogs.map((l) => ({ ...l, d: parseDetails(l) }));
+    const rejLog = parsedLogs.find(
+      (l) => l.entity === 'HospitalRejection' || l.d?.action === 'HOSPITAL_REJECTED' || l.d?.verificationStatus === 'REJECTED'
+    );
+    const submitLog = parsedLogs.find(
+      (l) => l.d?.event === 'HOSPITAL_ONBOARDING_SUBMITTED' || l.d?.isFinalSubmit === true
+    );
+
+    let verificationStatus = 'PENDING_REVIEW';
+    let rejectionReason = null;
+
+    if (user.status === 'BLOCKED') {
+      verificationStatus = 'BLOCKED';
+    } else if (user.isVerified && user.hospital.isVerified) {
+      verificationStatus = 'APPROVED';
+    } else if (rejLog && (!submitLog || new Date(submitLog.createdAt).getTime() < new Date(rejLog.createdAt).getTime())) {
+      verificationStatus = 'REJECTED';
+      rejectionReason = rejLog.d?.reason || 'Document or detail updates required by Admin.';
+    } else {
+      verificationStatus = 'PENDING_REVIEW';
+    }
+
+    res.json({
+      success: true,
+      hospital: {
+        ...user.hospital,
+        verificationStatus,
+        rejectionReason,
+      },
+    });
   } catch (err) {
     next(err);
   }
@@ -531,29 +681,144 @@ exports.getHospitalProfile = async (req, res, next) => {
 exports.updateHospitalProfile = async (req, res, next) => {
   try {
     const userId = req.user.userId || req.user.id;
-    const { name, address, phone, city, state, capabilities, emergencyAvailable, location } = req.body;
+    const {
+      name,
+      address,
+      phone,
+      email,
+      city,
+      state,
+      pincode,
+      capabilities,
+      emergencyAvailable,
+      hasEmergencyDepartment,
+      hasICU,
+      hasTraumaUnit,
+      hasCardiology,
+      hasNeurology,
+      hasAmbulance,
+      location,
+      latitude,
+      longitude,
+      isFinalSubmit,
+      idempotencyKey,
+    } = req.body;
 
-    const hospital = await prisma.hospital.findUnique({ where: { userId } });
-    if (!hospital) return res.status(404).json({ error: 'Hospital profile not found' });
-
-    const updated = await prisma.hospital.update({
-      where: { id: hospital.id },
-      data: {
-        name: name || hospital.name,
-        address: address || hospital.address,
-        phone: phone || hospital.phone,
-        city: city !== undefined ? city : hospital.city,
-        state: state !== undefined ? state : hospital.state,
-        capabilities: capabilities || hospital.capabilities,
-        emergencyAvailable: emergencyAvailable !== undefined ? emergencyAvailable : hospital.emergencyAvailable,
-        location: location || hospital.location,
-      },
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { hospital: true },
     });
 
-    res.json({ success: true, message: 'Profile updated successfully', hospital: updated });
+    if (!user) {
+      return res.status(404).json({ error: 'User account not found' });
+    }
+
+    let hospital = user.hospital;
+    if (!hospital) {
+      hospital = await prisma.hospital.create({
+        data: {
+          userId: user.id,
+          name: name || user.name || 'Hospital Facility',
+          address: address || 'Address Pending',
+          phone: phone || '0000000000',
+          email: email || user.email,
+          city: city || null,
+          state: state || null,
+          location: { latitude: Number(latitude) || 0, longitude: Number(longitude) || 0 },
+        },
+      });
+    }
+
+    // Validate location coordinates
+    let locData = hospital.location;
+    if (latitude !== undefined && longitude !== undefined && latitude !== '' && longitude !== '') {
+      const latNum = Number(latitude);
+      const lngNum = Number(longitude);
+      if (isNaN(latNum) || latNum < -90 || latNum > 90 || isNaN(lngNum) || lngNum < -180 || lngNum > 180) {
+        return res.status(400).json({ error: 'Invalid latitude (-90 to 90) or longitude (-180 to 180) coordinates.' });
+      }
+      locData = { latitude: latNum, longitude: lngNum };
+    } else if (location && typeof location === 'object') {
+      const latNum = Number(location.latitude ?? location.lat);
+      const lngNum = Number(location.longitude ?? location.lng);
+      if (Number.isFinite(latNum) && Number.isFinite(lngNum)) {
+        locData = { latitude: latNum, longitude: lngNum };
+      }
+    }
+
+    if (isFinalSubmit) {
+      if (!name || !name.trim()) return res.status(400).json({ error: 'Official Hospital Name is required for submission.' });
+      if (!phone || !/^[6-9]\d{9}$/.test(phone.trim())) return res.status(400).json({ error: 'Valid 10-digit Indian phone number is required.' });
+      if (!address || !address.trim()) return res.status(400).json({ error: 'Complete hospital street address is required.' });
+      if (!city || !city.trim()) return res.status(400).json({ error: 'City / District is required.' });
+      if (!state || !state.trim()) return res.status(400).json({ error: 'State is required.' });
+
+      const latVal = Number(locData?.latitude);
+      const lngVal = Number(locData?.longitude);
+      if (!Number.isFinite(latVal) || latVal < -90 || latVal > 90 || !Number.isFinite(lngVal) || lngVal < -180 || lngVal > 180 || (latVal === 0 && lngVal === 0)) {
+        return res.status(400).json({ error: 'Valid GPS latitude and longitude coordinates are required for hospital submission.' });
+      }
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const updatedHospital = await tx.hospital.update({
+        where: { id: hospital.id },
+        data: {
+          name: name ? name.trim() : hospital.name,
+          address: address ? address.trim() : hospital.address,
+          phone: phone ? phone.trim() : hospital.phone,
+          email: email ? email.trim() : hospital.email,
+          city: city !== undefined ? (city ? city.trim() : null) : hospital.city,
+          state: state !== undefined ? (state ? state.trim() : null) : hospital.state,
+          capabilities: Array.isArray(capabilities) ? capabilities : hospital.capabilities,
+          emergencyAvailable: emergencyAvailable !== undefined ? Boolean(emergencyAvailable) : hospital.emergencyAvailable,
+          hasEmergencyDepartment: hasEmergencyDepartment !== undefined ? Boolean(hasEmergencyDepartment) : hospital.hasEmergencyDepartment,
+          hasICU: hasICU !== undefined ? Boolean(hasICU) : hospital.hasICU,
+          hasTraumaUnit: hasTraumaUnit !== undefined ? Boolean(hasTraumaUnit) : hospital.hasTraumaUnit,
+          hasCardiology: hasCardiology !== undefined ? Boolean(hasCardiology) : hospital.hasCardiology,
+          hasNeurology: hasNeurology !== undefined ? Boolean(hasNeurology) : hospital.hasNeurology,
+          hasAmbulance: hasAmbulance !== undefined ? Boolean(hasAmbulance) : hospital.hasAmbulance,
+          location: locData,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'PROFILE_UPDATED',
+          entity: 'Hospital',
+          entityId: hospital.id,
+          endpoint: '/api/hospitals/profile',
+          details: {
+            event: isFinalSubmit ? 'HOSPITAL_ONBOARDING_SUBMITTED' : 'HOSPITAL_PROFILE_DRAFT_SAVED',
+            isFinalSubmit: Boolean(isFinalSubmit),
+            idempotencyKey: idempotencyKey || null,
+          },
+        },
+      });
+
+      return updatedHospital;
+    });
+
+    const message = isFinalSubmit
+      ? 'Your hospital registration has been submitted successfully. Our verification team will review your details and documents.'
+      : 'Hospital profile draft saved successfully.';
+
+    res.json({
+      success: true,
+      message,
+      hospital: updated,
+      verificationStatus: updated.isVerified ? 'VERIFIED' : 'PENDING_REVIEW',
+      onboardingStatus: isFinalSubmit ? 'SUBMITTED' : 'DRAFT',
+    });
   } catch (err) {
     next(err);
   }
+};
+
+exports.submitHospitalOnboarding = async (req, res, next) => {
+  req.body.isFinalSubmit = true;
+  return exports.updateHospitalProfile(req, res, next);
 };
 
 exports.getHospitalStaff = async (req, res, next) => {
@@ -618,6 +883,103 @@ exports.updateHospitalSettings = async (req, res, next) => {
     });
 
     res.json({ success: true, message: 'Settings updated successfully' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.getHospitalDiagnostics = async (req, res, next) => {
+  try {
+    const userId = req.user.userId || req.user.id;
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, role: true, status: true, isVerified: true, createdAt: true },
+    });
+
+    if (!user) return res.status(404).json({ success: false, error: 'User account not found' });
+
+    const hospital = await prisma.hospital.findUnique({
+      where: { userId },
+      select: {
+        id: true,
+        name: true,
+        isVerified: true,
+        emergencyAvailable: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    res.json({
+      success: true,
+      diagnostics: {
+        userId: user.id,
+        email: user.email,
+        databaseRole: user.role,
+        accountStatus: user.status,
+        userVerified: user.isVerified,
+        hospitalProfileExists: Boolean(hospital),
+        hospitalId: hospital?.id || null,
+        hospitalName: hospital?.name || null,
+        hospitalVerified: hospital?.isVerified || false,
+        emergencyAvailable: hospital?.emergencyAvailable || false,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.getUnseenApprovalEvent = async (req, res, next) => {
+  try {
+    const userId = req.user.userId || req.user.id;
+    const notification = await prisma.notification.findFirst({
+      where: {
+        userId,
+        type: 'SYSTEM',
+        title: 'HOSPITAL_APPROVAL_EVENT',
+        status: 'UNREAD',
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!notification) {
+      return res.json({ success: true, hasUnseenApproval: false });
+    }
+
+    res.json({
+      success: true,
+      hasUnseenApproval: true,
+      eventId: notification.id,
+      message: notification.message,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.consumeApprovalEvent = async (req, res, next) => {
+  try {
+    const userId = req.user.userId || req.user.id;
+    const { eventId } = req.body;
+
+    if (!eventId) {
+      return res.status(400).json({ success: false, error: 'eventId parameter is required' });
+    }
+
+    await prisma.notification.updateMany({
+      where: {
+        id: eventId,
+        userId,
+        title: 'HOSPITAL_APPROVAL_EVENT',
+      },
+      data: {
+        status: 'READ',
+        readAt: new Date(),
+      },
+    });
+
+    res.json({ success: true, message: 'Approval event consumed successfully' });
   } catch (err) {
     next(err);
   }

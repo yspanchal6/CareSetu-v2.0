@@ -252,3 +252,29 @@ docker-compose.override.yml
 
 backend/.env
 frontend/.env
+
+# Secret & Credential Protection
+.env
+.env.*
+!.env.example
+!backend/.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+*.crt
+*service-account*.json
+*firebase-service-account*.json
+*.log
+logs/
+
+# Worktree and local clone exclusions
+CareSetu-v2.0/
+CareSetu-v2.0-worktree/
+
+# Scratch & Temporary Test Results
+scratch/
+backend/scratch/
+test-results/
+frontend/test-results/
+

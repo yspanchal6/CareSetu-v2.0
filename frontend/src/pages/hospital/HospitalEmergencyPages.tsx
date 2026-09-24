@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, BrainCircuit, RefreshCw, Siren, Lock } from "lucide-react";
-import { hospitalApi, emergencyApi } from "../../services/api";
+import { API_BASE_URL, getAuthToken, hospitalApi, emergencyApi } from "../../services/api";
 import EmergencyCaseCard from "../../components/emergency/EmergencyCaseCard";
 import { Card } from "../../components/common/Card";
 import Badge from "../../components/common/Badge";
@@ -38,14 +38,10 @@ export function HospitalActiveCasesPage() {
   const openDocument = async (documentId: string, fileName: string) => {
     setLoadingDocId(documentId);
     try {
-      const token =
-        localStorage.getItem("jwt") ||
-        localStorage.getItem("caresetu_auth_token") ||
-        sessionStorage.getItem("caresetu_auth_token") ||
-        sessionStorage.getItem("jwt");
+      const token = getAuthToken();
 
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL || "http://localhost:3000/api"}/patient/documents/${documentId}/download`,
+        `${API_BASE_URL}/patient/documents/${documentId}/download`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -90,8 +86,14 @@ export function HospitalActiveCasesPage() {
     setHealthPackData(null);
     try {
       const res = await hospitalApi.getHealthPack(caseId);
-      if (res.success && res.data) {
-        setHealthPackData(res.data);
+      const rawData = res?.data ?? res;
+      // Safe structural log only: never print decrypted medical values.
+      console.log("[HealthPack] Loaded payload keys:", Object.keys(rawData || {}));
+
+      const pack = rawData?.healthPack || rawData?.data?.healthPack || rawData?.data || rawData;
+
+      if (pack) {
+        setHealthPackData(pack);
       } else {
         setPackError("Failed to load Health Pack data.");
       }
@@ -103,31 +105,47 @@ export function HospitalActiveCasesPage() {
     }
   };
 
+  const isFetchingRef = useState({ active: false })[0];
+
+  const healthPackSummary = useMemo(() => {
+    const pack = healthPackData?.healthPack || healthPackData?.data?.healthPack || healthPackData?.data || healthPackData || {};
+    // GET /api/health-pack/case/:caseId returns medical data nested under `healthData`.
+    const hd = pack?.healthData || healthPackData?.healthData || {};
+
+    return {
+      name: pack?.patient?.name || hd?.name || pack?.name || healthPackData?.name || "Patient",
+      patientId: pack?.patientId || pack?.patient_id || healthPackData?.patientId || "N/A",
+      bloodGroup: hd?.bloodGroup || hd?.blood_group || pack?.bloodGroup || pack?.blood_group || "NOT_PROVIDED",
+      allergies: hd?.allergies || pack?.allergies || pack?.allergy_list || pack?.allergyList || "None reported",
+      medications: hd?.medications || hd?.currentMedications || pack?.medications || pack?.current_medications || pack?.currentMedications || "None reported",
+      heartCondition: hd?.heartCondition || hd?.heart_condition || pack?.heartCondition || pack?.heart_condition || pack?.heart_status || pack?.heartStatus || "UNKNOWN",
+      diabetesStatus: hd?.diabetesStatus || hd?.diabetes_status || pack?.diabetesStatus || pack?.diabetes_status || "UNKNOWN",
+      hypertensionStatus: hd?.hypertensionStatus || hd?.hypertension_status || pack?.hypertensionStatus || pack?.hypertension_status || "UNKNOWN",
+      conditions: hd?.conditions || hd?.medicalConditions || hd?.medical_conditions || pack?.medical_conditions || pack?.medicalConditions || pack?.conditions || pack?.known_conditions || pack?.knownConditions || "None reported",
+      surgeries: hd?.surgeries || pack?.surgeries || pack?.past_surgeries || pack?.pastSurgeries || "",
+      notes: hd?.notes || pack?.notes || pack?.emergency_notes || pack?.emergencyNotes || "",
+      documents: Array.isArray(healthPackData?.documents) ? healthPackData.documents : [],
+    };
+  }, [healthPackData]);
+
   const load = useCallback(async () => {
+    if (isFetchingRef.active) return;
+    isFetchingRef.active = true;
     try {
       const res = await hospitalApi.getEmergencyCases();
       const rows: any[] = res.cases || [];
-      const enriched = await Promise.all(
-        rows.map(async (c) => {
-          try {
-            const st = await emergencyApi.status(c.caseId || c.id);
-            return { ...c, ...(st.case || {}), caseId: st.case?.caseId || c.caseId, id: st.case?.id || c.id };
-          } catch {
-            return null;
-          }
-        })
-      );
-      setCases(enriched.filter((c: any): c is any => !!c && ACTIVE_STATUSES.includes(c.status)));
+      setCases(rows.filter((c: any) => ACTIVE_STATUSES.includes(c.status)));
     } catch (err) {
       console.error("[ActiveCases] Failed to load:", err);
     } finally {
+      isFetchingRef.active = false;
       setLoading(false);
     }
-  }, []);
+  }, [isFetchingRef]);
 
   useEffect(() => {
     load();
-    const iv = setInterval(load, 5000);
+    const iv = setInterval(load, 20000);
     return () => clearInterval(iv);
   }, [load]);
 
@@ -275,9 +293,9 @@ export function HospitalActiveCasesPage() {
                     </h3>
                     <div className="bg-slate-50 p-3 rounded-lg flex justify-between items-center">
                       <div>
-                        <p className="font-bold text-navy">{healthPackData.healthData?.name || "Emergency Patient"}</p>
+                        <p className="font-bold text-navy">{healthPackSummary.name}</p>
                         <p className="text-xs text-slate-600">
-                          Patient ID: {healthPackData.patientId}
+                          Patient ID: {healthPackSummary.patientId}
                         </p>
                       </div>
                       <span className="text-xs font-semibold px-2.5 py-1 bg-sky-100 text-sky-800 rounded-full">
@@ -293,7 +311,7 @@ export function HospitalActiveCasesPage() {
                         🩸 Blood Group
                       </h3>
                       <p className="text-xl font-extrabold text-red-700">
-                        {healthPackData.healthData?.bloodGroup || "Not provided"}
+                        {healthPackSummary.bloodGroup}
                       </p>
                     </div>
                     <div className="bg-amber-50/60 p-3 rounded-lg border border-amber-100">
@@ -301,7 +319,7 @@ export function HospitalActiveCasesPage() {
                         ⚠️ Allergies
                       </h3>
                       <p className="text-sm font-semibold text-amber-900">
-                        {healthPackData.healthData?.allergies || "None reported"}
+                        {healthPackSummary.allergies}
                       </p>
                     </div>
                   </div>
@@ -312,7 +330,7 @@ export function HospitalActiveCasesPage() {
                       💊 Current Medications
                     </h3>
                     <p className="text-sm text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-200">
-                      {healthPackData.healthData?.medications || "None reported"}
+                      {healthPackSummary.medications}
                     </p>
                   </div>
 
@@ -322,23 +340,23 @@ export function HospitalActiveCasesPage() {
                       🩺 Confirmed Medical Conditions & History
                     </h3>
                     <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1.5 text-xs text-slate-800">
-                      <p><strong>Heart / Cardiac Status:</strong> {healthPackData.healthData?.heartCondition || "UNKNOWN"}</p>
-                      <p><strong>Diabetes Status:</strong> {healthPackData.healthData?.diabetesStatus || "UNKNOWN"}</p>
-                      <p><strong>Hypertension Status:</strong> {healthPackData.healthData?.hypertensionStatus || "UNKNOWN"}</p>
-                      <p><strong>Confirmed Conditions:</strong> {healthPackData.healthData?.conditions || "None reported"}</p>
-                      {healthPackData.healthData?.surgeries && <p><strong>Surgeries:</strong> {healthPackData.healthData?.surgeries}</p>}
-                      {healthPackData.healthData?.notes && <p><strong>Emergency Notes:</strong> {healthPackData.healthData?.notes}</p>}
+                      <p><strong>Heart / Cardiac Status:</strong> {healthPackSummary.heartCondition}</p>
+                      <p><strong>Diabetes Status:</strong> {healthPackSummary.diabetesStatus}</p>
+                      <p><strong>Hypertension Status:</strong> {healthPackSummary.hypertensionStatus}</p>
+                      <p><strong>Confirmed Conditions:</strong> {healthPackSummary.conditions}</p>
+                      {healthPackSummary.surgeries && <p><strong>Surgeries:</strong> {healthPackSummary.surgeries}</p>}
+                      {healthPackSummary.notes && <p><strong>Emergency Notes:</strong> {healthPackSummary.notes}</p>}
                     </div>
                   </div>
 
                   {/* ATTACHED REPORTS */}
-                  {healthPackData.documents && healthPackData.documents.length > 0 && (
+                  {healthPackSummary.documents.length > 0 && (
                     <div>
                       <h3 className="text-xs font-semibold text-slate-500 uppercase mb-2">
-                        📄 Medical Reports ({healthPackData.documents.length})
+                        📄 Medical Reports ({healthPackSummary.documents.length})
                       </h3>
                       <div className="space-y-2">
-                        {healthPackData.documents.map((doc: any) => (
+                        {healthPackSummary.documents.map((doc: any) => (
                           <div
                             key={doc.id}
                             className="flex items-center justify-between p-3 bg-sky-50 rounded-lg hover:bg-sky-100 border border-sky-200 transition"
@@ -371,7 +389,7 @@ export function HospitalActiveCasesPage() {
                     <span className="text-base">⚠️</span>
                     <div>
                       <p className="font-bold">Access Audit Logging Active</p>
-                      <p className="text-[11px] mt-0.5">Every access to this Health Pack is recorded in immutable audit logs (`HEALTH_PACK_VIEWED`). Access is time-limited to 24 hours.</p>
+                      <p className="text-[11px] mt-0.5">Every access to this Health Pack is recorded in immutable audit logs (HEALTH_PACK_VIEWED). Access is time-limited to 24 hours.</p>
                     </div>
                   </div>
                 </>
@@ -400,19 +418,29 @@ export function HospitalEmergenciesPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let active = true;
+    let fetching = false;
+
     const load = async () => {
+      if (!active || fetching) return;
+      fetching = true;
       try {
         const res = await hospitalApi.pendingCases();
-        setCases(res.cases || []);
+        if (active) setCases(res.cases || []);
       } catch (err) {
         console.error("[Hospital] Failed to load cases:", err);
       } finally {
-        setLoading(false);
+        fetching = false;
+        if (active) setLoading(false);
       }
     };
+
     load();
-    const iv = setInterval(load, 5000);
-    return () => clearInterval(iv);
+    const iv = setInterval(load, 20000);
+    return () => {
+      active = false;
+      clearInterval(iv);
+    };
   }, []);
 
   if (loading) {
@@ -447,6 +475,7 @@ export function HospitalEmergencyDetailPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [reason, setReason] = useState(rejectReasons[0]);
+  const [isAccepting, setIsAccepting] = useState(false);
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -497,7 +526,8 @@ export function HospitalEmergencyDetailPage() {
         <p className="text-sm text-navy mb-4">{c.symptoms || "Emergency case requiring immediate response."}</p>
 
         <div className="grid grid-cols-2 gap-4 text-sm mb-4">
-          <div><p className="text-xs text-text-secondary">Patient</p><p className="font-semibold text-navy">{c.patientName || "Emergency Patient"}, {c.age || "--"}</p></div>
+<div><p className="text-xs text-text-secondary">Patient</p><p className="font-semibold 
+            text-navy">{c.patientName || "Patient"}, {c.age || "--"}</p></div>
           <div><p className="text-xs text-text-secondary">Distance / ETA</p><p className="font-semibold text-navy">{c.distanceKm ? `${c.distanceKm.toFixed(1)} km` : "Nearby"} · {c.etaMin || 8} min</p></div>
           <div><p className="text-xs text-text-secondary">Required capability</p><p className="font-semibold text-navy">{c.requiredCapability || c.emergencyType || "Emergency Care"}</p></div>
           <div><p className="text-xs text-text-secondary">Location</p><p className="font-semibold text-navy">{c.location ? `${c.location.latitude?.toFixed(4)}, ${c.location.longitude?.toFixed(4)}` : "Live Location"}</p></div>
@@ -524,18 +554,28 @@ export function HospitalEmergencyDetailPage() {
           <Button
             variant="success"
             fullWidth
+            disabled={isAccepting}
             onClick={async () => {
+              if (isAccepting) return;
+              setIsAccepting(true);
               try {
                 await hospitalApi.acceptCase(targetCaseId);
                 setConfirmOpen(false);
                 showToast("success", `Case ${targetCaseId} accepted and assigned to your hospital.`);
                 navigate("/hospital/emergencies/active");
               } catch (err: any) {
-                showToast("error", err.message || "Failed to accept case");
+                let msg = err?.message || "Failed to accept case";
+                if (err?.status === 401) msg = "Your session has expired. Please log in again.";
+                else if (err?.status === 403) msg = err?.message || "You are not authorized to accept this emergency case.";
+                else if (err?.status === 409) msg = "This emergency case has already been accepted or is no longer available.";
+                else if (err?.status === 404) msg = "Emergency case not found.";
+                showToast("error", msg);
+              } finally {
+                setIsAccepting(false);
               }
             }}
           >
-            Confirm and assign doctor
+            {isAccepting ? "Processing..." : "Confirm and assign doctor"}
           </Button>
         </div>
       </Modal>

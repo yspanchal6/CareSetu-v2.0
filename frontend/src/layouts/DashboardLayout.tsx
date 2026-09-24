@@ -32,7 +32,7 @@ export default function DashboardLayout({ items, roleLabel }: { items: NavItem[]
               </div>
             </div>
           )}
-          {!user?.isVerified && (
+          {!user?.isVerified && !['admin', 'hospital'].includes(user?.role?.toLowerCase() || '') && (
             <div className="mb-4 p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-900 shadow-sm">
               <div className="flex items-center gap-2.5">
                 <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />

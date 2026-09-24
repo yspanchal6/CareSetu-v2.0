@@ -1,22 +1,26 @@
-const API_BASE_URL = (import.meta.env.VITE_API_URL ?? "/api").replace(/\/$/, "");
+export const API_BASE_URL = (import.meta.env.VITE_API_URL ?? "/api").replace(/\/$/, "");
 
 // Derive the Socket.IO URL from the configured API URL so realtime stays consistent.
 export const SOCKET_URL =
   import.meta.env.VITE_SOCKET_URL ??
   (API_BASE_URL.startsWith("http")
     ? new URL(API_BASE_URL).origin
-    : "http://localhost:3000");
+    : typeof window !== "undefined"
+      ? `${window.location.protocol}//${window.location.hostname}:3000`
+      : "http://localhost:3000");
 
 const TOKEN_STORAGE_KEY = "caresetu_auth_token";
 const ACTIVE_CASE_STORAGE_KEY = "caresetu_active_emergency_case";
 
 export class ApiError extends Error {
   public readonly status: number;
+  public readonly retryAfterSeconds?: number;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, retryAfterSeconds?: number) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 
@@ -25,43 +29,94 @@ type RequestOptions = Omit<RequestInit, "body"> & {
   authenticated?: boolean;
 };
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { body, authenticated = true, headers: providedHeaders, ...requestOptions } = options;
-  const headers = new Headers(providedHeaders);
+// Map to deduplicate concurrent identical in-flight GET requests
+const inFlightRequests = new Map<string, Promise<any>>();
 
-  if (body !== undefined && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
+export function getAuthToken(): string | null {
+  return sessionStorage.getItem(TOKEN_STORAGE_KEY);
+}
 
-  const token =
-    localStorage.getItem("jwt") ||
-    sessionStorage.getItem(TOKEN_STORAGE_KEY);
-
-  if (authenticated && token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-
-  let response: Response;
+function getTokenMetadata(token: string | null) {
+  if (!token) return { userId: null, role: null };
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
-      ...requestOptions,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    const payload = JSON.parse(atob(token.split(".")[1] || ""));
+    return {
+      userId: payload.userId || payload.id || payload.sub || null,
+      role: payload.role || (payload.isGuest ? "GUEST" : null),
+    };
   } catch {
-    throw new ApiError("Cannot reach the CareSetu API. Check that the backend is running.", 0);
+    return { userId: null, role: null };
+  }
+}
+
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const method = (options.method || "GET").toUpperCase();
+  const isGet = method === "GET";
+  const dedupeKey = isGet ? `${options.authenticated ?? true}:${path}` : null;
+
+  if (dedupeKey && inFlightRequests.has(dedupeKey)) {
+    return inFlightRequests.get(dedupeKey) as Promise<T>;
   }
 
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    const message = payload?.error ?? payload?.message ?? `Request failed (${response.status})`;
-    const err = new ApiError(message, response.status);
-    (err as any).code = payload?.code;
-    (err as any).data = payload;
-    throw err;
+  const executeRequest = async (): Promise<T> => {
+    const { body, authenticated = true, headers: providedHeaders, ...requestOptions } = options;
+    const headers = new Headers(providedHeaders);
+
+    if (body !== undefined && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+
+    const token = getAuthToken();
+
+    if (authenticated && token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+
+    if (path === "/emergency/sos") {
+      const metadata = getTokenMetadata(token);
+      console.info("[API Auth Diagnostic]", {
+        userId: metadata.userId,
+        role: metadata.role,
+        requestPath: path,
+        hasAuthorizationHeader: headers.has("Authorization"),
+        apiBaseUrl: API_BASE_URL,
+      });
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}${path}`, {
+        ...requestOptions,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    } catch {
+      throw new ApiError("Cannot reach the CareSetu API. Check that the backend is running.", 0);
+    }
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      const retryHeader = response.headers.get("Retry-After");
+      const retryAfterSeconds = retryHeader ? parseInt(retryHeader, 10) : payload?.retryAfterSeconds;
+      const message = payload?.error ?? payload?.message ?? `Request failed (${response.status})`;
+      const err = new ApiError(message, response.status, retryAfterSeconds);
+      (err as any).code = payload?.code;
+      (err as any).data = payload;
+      throw err;
+    }
+
+    return payload as T;
+  };
+
+  if (dedupeKey) {
+    const promise = executeRequest().finally(() => {
+      inFlightRequests.delete(dedupeKey);
+    });
+    inFlightRequests.set(dedupeKey, promise);
+    return promise;
   }
 
-  return payload as T;
+  return executeRequest();
 }
 
 export type BackendRole = "PATIENT" | "HOSPITAL" | "DOCTOR" | "ADMIN";
@@ -73,12 +128,19 @@ export interface AuthResponse {
   user?: {
     id: string;
     email: string;
-    role: BackendRole;
+    role: BackendRole | "GUEST" | string;
     name?: string;
     locationSource?: string;
+    isVerified?: boolean;
+    isProfileComplete?: boolean;
+    isGuest?: boolean;
+    patient?: any;
+    hospital?: any;
   };
   message?: string;
   mock?: boolean;
+  isNewUser?: boolean;
+  onboardingRoute?: string;
   expiresAt?: string;
   channels?: Array<{ channel: string; status: string; mock?: boolean; error?: string }>;
   devOtp?: string;
@@ -111,11 +173,16 @@ export interface NearbyHospital {
   id: string;
   name: string;
   address: string;
+  city?: string;
   phone: string;
   capabilities: string[];
   emergencyAvailable: boolean;
+  isVerified?: boolean;
+  verificationStatus?: string;
   distanceKm?: number;
+  distance?: string;
   location?: { latitude: number; longitude: number };
+  lastUpdated?: string;
 }
 
 export interface EmergencyCaseStatus {
@@ -269,7 +336,7 @@ export const emergencyApi = {
       latitude < -90 || latitude > 90 ||
       longitude < -180 || longitude > 180
     ) {
-      return Promise.reject(new Error("Unable to get your live location. Please allow location access and try again."));
+      return Promise.reject(new ApiError("Unable to get your live location. Please allow location access and try again.", 400));
     }
 
     const requestPayload = {
@@ -327,8 +394,10 @@ export function emergencySyncClient(_endpoint: string, requestPayload: any) {
 }
 
 export const hospitalApi = {
-  nearby: (latitude: number, longitude: number) =>
-    request<{ success: true; hospitals: NearbyHospital[] }>(`/hospitals/nearby?lat=${latitude}&lng=${longitude}`),
+  nearby: (latitude: number, longitude: number, radius?: number) => {
+    const radiusParam = radius ? `&radius=${radius}` : '';
+    return request<{ success: true; hospitals: NearbyHospital[]; count?: number; searchRadiusKm?: number }>(`/hospitals/nearby?lat=${latitude}&lng=${longitude}${radiusParam}`);
+  },
   getEmergencyCases: () =>
     request<{ success: true; cases: any[] }>(`/hospitals/cases`),
   acceptCase: (caseId: string) =>
@@ -358,7 +427,15 @@ export const hospitalApi = {
   getProfile: () =>
     request<{ success: true; hospital: any }>("/hospitals/profile"),
   updateProfile: (payload: any) =>
-    request<{ success: true; hospital: any }>("/hospitals/profile", { method: "PUT", body: payload }),
+    request<{ success: boolean; message?: string; hospital?: any; user?: any; error?: string }>("/hospitals/profile", { method: "PUT", body: payload }),
+  submitOnboarding: (payload: any) =>
+    request<{ success: boolean; message: string; hospital?: any; user?: any; error?: string }>("/hospitals/submit-onboarding", { method: "POST", body: payload }),
+  getDiagnostics: () =>
+    request<{ success: true; diagnostics: any }>("/hospitals/diagnostics"),
+  getApprovalEvent: () =>
+    request<{ success: true; hasUnseenApproval: boolean; eventId?: string; message?: string }>("/hospitals/approval-event"),
+  consumeApprovalEvent: (eventId: string) =>
+    request<{ success: true; message: string }>("/hospitals/approval-event/consume", { method: "POST", body: { eventId } }),
   getStaff: () =>
     request<{ success: true; staff: any[] }>("/hospitals/staff"),
   getSettings: () =>
@@ -369,6 +446,13 @@ export const hospitalApi = {
     request<{ success: true; data: any }>(`/health-pack/case/${caseId}`),
   getSharedPack: (packId: string) =>
     request<{ success: true; data: any }>(`/health-pack/shared/${packId}`),
+};
+
+export const patientApi = {
+  getProfile: () =>
+    request<{ success: boolean; patient: any }>("/patient/profile").catch(() => request<{ success: boolean; patient: any }>("/auth/me")),
+  updateProfile: (payload: any) =>
+    request<{ success: boolean; patient?: any; user?: any; error?: string }>("/patient/profile", { method: "PUT", body: payload }).catch(() => request<{ success: boolean; patient?: any; user?: any; error?: string }>("/auth/me", { method: "PUT", body: payload })),
 };
 
 export const systemApi = {
@@ -415,7 +499,7 @@ export const medicalDocumentApi = {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("documentType", documentType);
-    const token = localStorage.getItem("jwt") || sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    const token = getAuthToken();
     return fetch(`${API_BASE_URL}/patient/documents`, {
       method: "POST",
       headers: {
@@ -525,6 +609,21 @@ export const adminApi = {
   },
   getAuditLogs: () =>
     request<{ success: true; logs: any[] }>("/admin/audit-logs"),
+  getHospitalVerificationRequests: (status?: string, search?: string) => {
+    const params = new URLSearchParams();
+    if (status) params.append("status", status);
+    if (search) params.append("search", search);
+    return request<{ success: true; count: number; requests: any[] }>(`/admin/hospitals/verification-requests?${params.toString()}`);
+  },
+  approveHospital: (id: string) =>
+    request<{ success: true; message: string; hospital: any; verificationStatus: string }>(`/admin/hospitals/${id}/approve`, {
+      method: "POST",
+    }),
+  rejectHospital: (id: string, reason: string) =>
+    request<{ success: true; message: string; hospital: any; verificationStatus: string }>(`/admin/hospitals/${id}/reject`, {
+      method: "POST",
+      body: { reason },
+    }),
 };
 
 export interface DocumentVerificationStatus {
@@ -532,6 +631,8 @@ export interface DocumentVerificationStatus {
   user: any;
   role: "PATIENT" | "DOCTOR" | "HOSPITAL" | "ADMIN";
   isVerified: boolean;
+  verificationStatus?: string;
+  hospitalStatus?: string;
   requiredDocuments: { type: string; label: string }[];
   uploadedDocuments: {
     id: string;
@@ -552,7 +653,7 @@ export const documentVerificationApi = {
   getStatus: () =>
     request<DocumentVerificationStatus>("/auth/document-verification/status"),
   uploadDocument: async (file: File, documentType: string) => {
-    const token = localStorage.getItem("jwt") || sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    const token = getAuthToken();
     const formData = new FormData();
     formData.append("file", file);
     formData.append("documentType", documentType);
@@ -619,10 +720,24 @@ export const documentVerificationApi = {
     }),
 };
 
+export const geocodingApi = {
+  geocode: (address: string, city: string, state: string, pincode: string) => {
+    const params = new URLSearchParams();
+    if (address) params.append("address", address);
+    if (city) params.append("city", city);
+    if (state) params.append("state", state);
+    if (pincode) params.append("pincode", pincode);
+    return request<{ success: boolean; latitude: number; longitude: number; source: string; verified?: boolean }>(`/geocoding/geocode?${params.toString()}`);
+  },
+  reverseGeocode: (lat: number, lng: number) => {
+    return request<{ success: boolean; address: string; city: string; state: string; pincode: string; latitude: number; longitude: number }>(`/geocoding/reverse?lat=${lat}&lng=${lng}`);
+  },
+};
+
 
 export function saveAuthToken(token: string) {
   sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
-  localStorage.setItem("jwt", token);
+  localStorage.removeItem("jwt");
 }
 
 

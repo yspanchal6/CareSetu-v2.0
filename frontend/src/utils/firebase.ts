@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { getAuth, GoogleAuthProvider, sendEmailVerification, reload, applyActionCode, User as FirebaseUser } from 'firebase/auth';
+import { getAuthToken } from '../services/api';
 
 // Use standard env variables for React (Vite uses import.meta.env)
 const firebaseConfig = {
@@ -109,10 +110,10 @@ export const onMessageListener = () =>
 
 // New function to send token to backend safely
 export const sendTokenToBackend = async (token: string) => {
-  const tokenString = localStorage.getItem('token');
+  const tokenString = getAuthToken();
 
   if (!tokenString) {
-    console.error("No token found in localStorage. Cannot save FCM token.");
+    console.error("No authenticated session found. Cannot save FCM token.");
     return false;
   }
 

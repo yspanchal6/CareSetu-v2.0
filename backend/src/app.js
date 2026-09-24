@@ -17,7 +17,9 @@ const healthPackRoutes = require('./routes/health-pack.routes');
 const fcmRoutes = require('./routes/fcm.routes');
 const medicalDocumentRoutes = require('./routes/medical-document.routes');
 const documentVerificationRoutes = require('./routes/document-verification.routes');
+const geocodingRoutes = require('./routes/geocoding.routes');
 const settingsRoutes = require('./routes/settings.routes');
+const patientRoutes = require('./routes/patient.routes');
 
 const app = express();
 
@@ -65,6 +67,8 @@ app.use('/api/hospitals', hospitalRoutes);
 app.use('/api/doctors', doctorRoutes);
 app.use('/api/admin', adminLimiter, adminRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/patient', patientRoutes);
+app.use('/api/patients', patientRoutes);
 app.use('/api/health-pack', healthPackRoutes);
 app.use('/api/healthpack', healthPackRoutes);
 app.use('/api/patient/documents', docDownloadLimiter, medicalDocumentRoutes);
@@ -72,6 +76,7 @@ app.use('/api/documents', docDownloadLimiter, medicalDocumentRoutes);
 app.use('/api/medical-documents', docDownloadLimiter, medicalDocumentRoutes);
 app.use('/api/fcm', fcmRoutes);
 app.use('/api/chat', aiChatLimiter, chatRoutes);
+app.use('/api/geocoding', geocodingRoutes);
 
 // Comprehensive Deep Health Check Endpoint
 app.get(['/health', '/api/health'], async (req, res) => {

@@ -70,8 +70,90 @@ class HealthPackService {
   }
 
   /**
-   * Automatically shares the patient's HealthPack with the accepting hospital.
+   * Smallest safe synchronization mechanism: after a patient updates their
+   * medical profile, re-encrypt their latest ACTIVE HealthPack so hospitals
+   * never read a stale/empty snapshot. Pack-only extension fields (surgeries,
+   * notes, etc.) are preserved. If no ACTIVE pack exists, one is generated
+   * from the current profile.
    */
+  async refreshHealthPackFromPatient(patientId) {
+    const patient = await prisma.patient.findUnique({ where: { id: patientId } });
+    if (!patient) return null;
+
+    const isMeaningful = (v) => {
+      if (v == null) return false;
+      const s = String(v).trim();
+      return s.length > 0 && s !== 'NOT_PROVIDED' && s !== 'UNKNOWN';
+    };
+
+    let healthPack = await prisma.healthPack.findFirst({
+      where: { patientId, status: 'ACTIVE' },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!healthPack) {
+      return this.createHealthPack(patientId, {
+        bloodGroup: patient.bloodGroup || 'NOT_PROVIDED',
+        allergies: patient.allergies || 'NOT_PROVIDED',
+        medications: patient.medications || 'NOT_PROVIDED',
+        conditions: patient.conditions || patient.medicalConditions || 'NOT_PROVIDED',
+        medicalConditions: patient.medicalConditions || patient.conditions || 'NOT_PROVIDED',
+        heartCondition: patient.heartCondition || 'UNKNOWN',
+        diabetesStatus: patient.diabetesStatus || 'UNKNOWN',
+        hypertensionStatus: patient.hypertensionStatus || 'UNKNOWN',
+      });
+    }
+
+    // Preserve pack-only extension fields not managed by the patient profile.
+    let existing = {};
+    try {
+      existing = JSON.parse(decrypt(healthPack.encryptedData, healthPack.iv)) || {};
+    } catch (err) {
+      existing = {};
+    }
+
+    const project = (profileValue, existingValue, fallback) => {
+      if (isMeaningful(profileValue)) return String(profileValue).trim();
+      if (isMeaningful(existingValue)) return String(existingValue).trim();
+      return fallback;
+    };
+
+    const conditionsValue = patient.conditions || patient.medicalConditions || null;
+
+    const merged = {
+      ...existing,
+      bloodGroup: project(patient.bloodGroup, existing.bloodGroup, 'NOT_PROVIDED'),
+      allergies: project(patient.allergies, existing.allergies, 'NOT_PROVIDED'),
+      medications: project(patient.medications, existing.medications, 'NOT_PROVIDED'),
+      conditions: project(conditionsValue, existing.conditions || existing.medicalConditions, 'NOT_PROVIDED'),
+      medicalConditions: project(conditionsValue, existing.medicalConditions || existing.conditions, 'NOT_PROVIDED'),
+      heartCondition: project(patient.heartCondition, existing.heartCondition, 'UNKNOWN'),
+      diabetesStatus: project(patient.diabetesStatus, existing.diabetesStatus, 'UNKNOWN'),
+      hypertensionStatus: project(patient.hypertensionStatus, existing.hypertensionStatus, 'UNKNOWN'),
+    };
+
+    const { iv, encryptedData } = encrypt(JSON.stringify(merged));
+
+    const updated = await prisma.healthPack.update({
+      where: { id: healthPack.id },
+      data: { encryptedData, iv },
+    });
+
+    try {
+      await prisma.auditLog.create({
+        data: {
+          action: 'HEALTH_PACK_UPDATED',
+          entity: 'HealthPack',
+          entityId: healthPack.id,
+          details: { event: 'SYNCED_FROM_PATIENT_PROFILE', patientId },
+        },
+      });
+    } catch (auditErr) {
+      console.warn('[HealthPack] Profile sync audit warning:', auditErr.message);
+    }
+
+    return updated;
+  }
   async shareHealthPackWithHospital(patientId, hospitalId, hospitalUserId) {
     let healthPack = await prisma.healthPack.findFirst({
       where: { patientId, status: 'ACTIVE' },
@@ -121,7 +203,7 @@ class HealthPackService {
   /**
    * Decrypts and retrieves a HealthPack for an authorized hospital using caseId.
    */
-  async getDecryptedHealthPackForCase(caseId, hospitalUserId) {
+  async getDecryptedHealthPackForCase(caseId, hospitalUserId, userRole = 'HOSPITAL') {
     const hospital = await prisma.hospital.findFirst({ where: { userId: hospitalUserId } });
     if (!hospital) {
       throw new Error('Hospital profile not found.');
@@ -149,6 +231,7 @@ class HealthPackService {
     // Retrieve active HealthPack for the patient
     const healthPack = await prisma.healthPack.findFirst({
       where: { patientId: emergencyCase.patientId, status: 'ACTIVE' },
+      include: { shares: true },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -156,31 +239,48 @@ class HealthPackService {
       throw new Error('No active HealthPack found for this patient.');
     }
 
-    // Verify HealthPackShare / Consent exists and is ACTIVE and not expired
-    const share = await prisma.healthPackShare.findFirst({
-      where: {
-        healthPackId: healthPack.id,
-        sharedWithHospitalId: hospital.id,
-        status: 'ACTIVE',
-        consentGranted: true,
-        expiresAt: { gt: new Date() },
-      },
+    // Check HealthPack overall expiration
+    if (healthPack.expiresAt && healthPack.expiresAt < new Date()) {
+      throw new Error('Unauthorized access: HealthPack has expired.');
+    }
+
+    // Normalize shared_with values as string array of UUIDs
+    const activeShares = (healthPack.shares || []).filter(
+      (s) => s.status === 'ACTIVE' && (!s.expiresAt || new Date(s.expiresAt) > new Date())
+    );
+
+    const shared_with = activeShares.map((s) => String(s.sharedWithHospitalId || s.sharedWithUserId || '')).filter(Boolean);
+
+    // Verify hospital ID or hospital user ID exists in shared_with
+    const isSharedWithMember = shared_with.includes(String(hospital.id)) || shared_with.includes(String(hospitalUserId));
+
+    // Safe diagnostic log (DO NOT log keys, medical data, or tokens)
+    console.log('[HealthPack Diagnostic Log]', {
+      caseId: emergencyCase.caseId || emergencyCase.id,
+      hospitalId: hospital.id,
+      hospitalRole: userRole,
+      healthPackId: healthPack.id,
+      sharedWithMembershipResult: isSharedWithMember ? 'AUTHORIZED' : 'UNAUTHORIZED',
     });
 
-    if (!share) {
+    if (!isSharedWithMember) {
       await prisma.auditLog.create({
         data: {
           userId: hospitalUserId,
           action: 'HEALTH_PACK_VIEWED',
           entity: 'HealthPack',
           entityId: healthPack.id,
-          details: `UNAUTHORIZED ACCESS ATTEMPT: No active share for case ${caseId}`,
+          details: { event: 'UNAUTHORIZED_ACCESS_ATTEMPT', caseId, reason: 'No active share record found for hospital' },
         },
       });
       throw new Error('Unauthorized access: HealthPack access expired or not shared.');
     }
 
-    // Decrypt AES-256-GCM data
+    const shareRecord = activeShares.find(
+      (s) => String(s.sharedWithHospitalId) === String(hospital.id) || String(s.sharedWithUserId) === String(hospitalUserId)
+    );
+
+    // Decrypt AES-256-CBC hex payload strictly
     const decryptedString = decrypt(healthPack.encryptedData, healthPack.iv);
     const healthData = JSON.parse(decryptedString);
 
@@ -223,15 +323,26 @@ class HealthPackService {
         action: 'HEALTH_PACK_VIEWED',
         entity: 'HealthPack',
         entityId: healthPack.id,
-        details: `Hospital ${hospital.name} decrypted HealthPack for case ${caseId}`,
+        details: { event: 'HEALTH_PACK_DECRYPTED', caseId, hospitalName: hospital.name },
       },
+    });
+
+    // Never return encrypted_data, iv, or keys
+    // Only expose the display name after all authorization/expiry checks above passed.
+    const patientRecord = await prisma.patient.findUnique({
+      where: { id: healthPack.patientId },
+      select: { id: true, name: true },
     });
 
     return {
       id: healthPack.id,
       patientId: healthPack.patientId,
+      patient: {
+        id: patientRecord?.id || healthPack.patientId,
+        name: patientRecord?.name || 'Patient',
+      },
       createdAt: healthPack.createdAt,
-      expiresAt: share.expiresAt,
+      expiresAt: shareRecord?.expiresAt || healthPack.expiresAt,
       healthData,
       documents,
       medicalSummary: decryptedMedicalSummary,

@@ -23,11 +23,13 @@ export default function EmergencyCaseCard({
   onAccept,
   onReject,
   onView,
+  isProcessing = false,
 }: {
   emergencyCase: any;
   onAccept?: () => void;
   onReject?: () => void;
   onView?: () => void;
+  isProcessing?: boolean;
 }) {
   const c = emergencyCase || {};
   const caseIdDisplay = c.publicCaseId || c.caseId || c.id || "CASE-UNKNOWN";
@@ -138,13 +140,13 @@ export default function EmergencyCaseCard({
       {(onAccept || onReject) && (
         <div className="flex gap-2 mt-4">
           {onReject && (
-            <Button variant="outline" size="sm" fullWidth onClick={onReject}>
+            <Button variant="outline" size="sm" fullWidth onClick={onReject} disabled={isProcessing}>
               ❌ CANNOT HANDLE
             </Button>
           )}
           {onAccept && (
-            <Button variant="success" size="sm" fullWidth onClick={onAccept}>
-              ✅ ACCEPT
+            <Button variant="success" size="sm" fullWidth onClick={onAccept} disabled={isProcessing}>
+              {isProcessing ? "Accepting..." : "✅ ACCEPT"}
             </Button>
           )}
         </div>

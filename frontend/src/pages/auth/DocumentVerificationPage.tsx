@@ -16,6 +16,7 @@ import {
 import Button from "../../components/common/Button";
 import { OtpInput } from "../../components/common/OtpInput";
 import { useAuth } from "../../context/AuthContext";
+import { getAuthToken } from "../../services/api";
 import { useToast } from "../../components/common/Toast";
 import { documentVerificationApi, DocumentVerificationStatus } from "../../services/api";
 
@@ -47,24 +48,47 @@ export default function DocumentVerificationPage() {
   const [otpErrorMessage, setOtpErrorMessage] = useState<string | null>(null);
   const isVerifyingRef = useRef<boolean>(false);
 
+  const isFetchingRef = useRef(false);
+
   const loadStatus = async () => {
+    if (!user || isFetchingRef.current) return;
+    isFetchingRef.current = true;
     setLoading(true);
     try {
       const res = await documentVerificationApi.getStatus();
       setStatusData(res);
-      if (res.isVerified) {
+      if (res.role === "HOSPITAL") {
+        if (res.verificationStatus === "APPROVED" && res.hospitalStatus === "ACTIVE") {
+          setStep("success");
+        }
+      } else if (res.isVerified) {
         setStep("success");
       }
-    } catch (err) {
-      showToast("error", err instanceof Error ? err.message : "Failed to load verification status.");
+    } catch (err: any) {
+      if (err?.status === 401) {
+        showToast("error", "Session expired. Please log in again.");
+        navigate("/login", { replace: true });
+      } else if (err?.status === 403) {
+        showToast("error", "Access restricted. You do not have permission for document verification.");
+        const role = user?.role || "PATIENT";
+        navigate(`/${role.toLowerCase()}/dashboard`, { replace: true });
+      } else if (err?.status === 429) {
+        const retryAfter = err?.retryAfterSeconds || 30;
+        showToast("error", `Rate limit reached. Please wait ${retryAfter} seconds before trying again.`);
+      } else {
+        showToast("error", err instanceof Error ? err.message : "Server error loading verification status.");
+      }
     } finally {
+      isFetchingRef.current = false;
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadStatus();
-  }, []);
+    if (user) {
+      loadStatus();
+    }
+  }, [user]);
 
   // Timer logic
   useEffect(() => {
@@ -160,7 +184,7 @@ export default function DocumentVerificationPage() {
         setOtpStatus("success");
         showToast("success", "Document verification successful!");
         if (res.user) {
-          await setSession(res.user, localStorage.getItem("jwt") || "");
+          await setSession(res.user, getAuthToken() || "");
         }
         setTimeout(() => {
           setStep("success");
@@ -245,18 +269,18 @@ export default function DocumentVerificationPage() {
   const roleLabel = statusData?.role || user?.role || "User";
 
   return (
-    <div className="min-h-[85vh] flex items-center justify-center p-4 sm:p-6 bg-slate-50/50">
-      <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl border border-slate-100 p-6 sm:p-8">
+    <div className="min-h-[85vh] flex items-center justify-center p-3 sm:p-6 bg-slate-50/50">
+      <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl border border-slate-100 p-4 sm:p-8">
         {/* Header */}
-        <div className="flex items-center gap-3 border-b border-slate-100 pb-5 mb-6">
-          <div className="p-3 bg-sky-50 text-sky rounded-xl">
-            <ShieldCheck className="w-7 h-7" />
+        <div className="flex items-center gap-3 border-b border-slate-100 pb-4 sm:pb-5 mb-5 sm:mb-6">
+          <div className="p-2.5 sm:p-3 bg-sky-50 text-sky rounded-xl shrink-0">
+            <ShieldCheck className="w-6 h-6 sm:w-7 sm:h-7" />
           </div>
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-navy">
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-2xl font-bold text-navy leading-tight">
               Post-Registration Document Verification
             </h1>
-            <p className="text-xs sm:text-sm text-slate-500">
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
               Account Role: <span className="font-semibold text-sky uppercase">{roleLabel}</span>
             </p>
           </div>
@@ -264,15 +288,15 @@ export default function DocumentVerificationPage() {
 
         {/* STEP 1: DOCUMENTS UPLOAD & CHECKLIST */}
         {step === "documents" && (
-          <div className="space-y-6 animate-fade-in">
-            <div className="bg-sky-50/50 border border-sky-100 rounded-xl p-4 text-xs text-slate-700">
+          <div className="space-y-5 sm:space-y-6 animate-fade-in">
+            <div className="bg-sky-50/50 border border-sky-100 rounded-xl p-3.5 sm:p-4 text-xs text-slate-700">
               <p className="font-semibold text-navy mb-1">Upload Required Verification Documents</p>
               <p>Please upload all required official documents for your <span className="font-bold">{roleLabel}</span> account before completing verification.</p>
               <p className="mt-1 text-slate-500">Accepted formats: PDF, JPG, PNG (Max 10MB per file).</p>
             </div>
 
             {/* Document Upload Cards */}
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {statusData?.requiredDocuments.map((reqDoc) => {
                 const uploaded = statusData.uploadedDocuments.filter((d) => d.documentType === reqDoc.type);
                 const isUploaded = uploaded.length > 0;
@@ -280,20 +304,20 @@ export default function DocumentVerificationPage() {
                 return (
                   <div
                     key={reqDoc.type}
-                    className={`p-4 rounded-xl border transition-all ${
+                    className={`p-3.5 sm:p-4 rounded-xl border transition-all ${
                       isUploaded ? "border-emerald-200 bg-emerald-50/20" : "border-slate-200 bg-white"
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <FileText className={`w-4 h-4 ${isUploaded ? "text-emerald-600" : "text-slate-400"}`} />
-                          <h3 className="text-sm font-bold text-navy">{reqDoc.label}</h3>
+                          <FileText className={`w-4 h-4 shrink-0 ${isUploaded ? "text-emerald-600" : "text-slate-400"}`} />
+                          <h3 className="text-xs sm:text-sm font-bold text-navy leading-snug">{reqDoc.label}</h3>
                         </div>
-                        <p className="text-xs text-slate-500 mt-1">Status: {isUploaded ? "Uploaded" : "Pending Upload"}</p>
+                        <p className="text-[11px] sm:text-xs text-slate-500 mt-1">Status: {isUploaded ? "Uploaded" : "Pending Upload"}</p>
                       </div>
 
-                      <label className="cursor-pointer">
+                      <label className="cursor-pointer shrink-0 w-full sm:w-auto">
                         <input
                           type="file"
                           accept=".pdf,.jpg,.jpeg,.png"
@@ -301,7 +325,7 @@ export default function DocumentVerificationPage() {
                           onChange={(e) => handleFileUpload(e, reqDoc.type)}
                           disabled={uploadingType === reqDoc.type}
                         />
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-sky text-white hover:bg-sky-600 transition-colors shadow-sm disabled:opacity-50">
+                        <span className="inline-flex items-center justify-center gap-1.5 w-full sm:w-auto px-3 py-2 rounded-lg text-xs font-semibold bg-sky text-white hover:bg-sky-600 transition-colors shadow-sm disabled:opacity-50">
                           {uploadingType === reqDoc.type ? (
                             <>
                               <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -321,15 +345,15 @@ export default function DocumentVerificationPage() {
                     {uploaded.length > 0 && (
                       <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
                         {uploaded.map((doc) => (
-                          <div key={doc.id} className="flex items-center justify-between text-xs bg-white p-2.5 rounded-lg border border-slate-100">
-                            <div className="flex items-center gap-2 truncate pr-2">
+                          <div key={doc.id} className="flex items-center justify-between text-xs bg-white p-2 sm:p-2.5 rounded-lg border border-slate-100 gap-2 min-w-0">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
                               <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                              <span className="font-semibold text-slate-700 truncate">{doc.fileName}</span>
-                              <span className="text-slate-400">({(doc.fileSize / 1024).toFixed(0)} KB)</span>
+                              <span className="font-semibold text-slate-700 truncate min-w-0">{doc.fileName}</span>
+                              <span className="text-slate-400 shrink-0">({(doc.fileSize / 1024).toFixed(0)} KB)</span>
                             </div>
                             <button
                               onClick={() => handleDeleteDocument(doc.id)}
-                              className="text-rose-500 hover:text-rose-700 p-1 rounded transition-colors"
+                              className="text-rose-500 hover:text-rose-700 p-1 rounded transition-colors shrink-0"
                               title="Delete document"
                             >
                               <Trash2 className="w-3.5 h-3.5" />

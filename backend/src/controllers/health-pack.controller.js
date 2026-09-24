@@ -99,11 +99,11 @@ const getMyHealthPack = async (req, res, next) => {
 
 const getCaseHealthPack = async (req, res, next) => {
   try {
-    const { userId } = req.user;
+    const userId = req.user.userId || req.user.id;
     const { caseId } = req.params;
 
     try {
-      const data = await healthPackService.getDecryptedHealthPackForCase(caseId, userId);
+      const data = await healthPackService.getDecryptedHealthPackForCase(caseId, userId, req.user.role);
       return res.status(200).json({
         success: true,
         data,

@@ -152,6 +152,7 @@ class OtpService {
         ...(c.mock ? { mock: true } : {}),
       })),
       mock: channels.some((channel) => channel.status === 'sent' && channel.mock === true),
+      ...((process.env.NODE_ENV === 'test' || process.env.ALLOW_DEV_OTP === 'true') ? { devOtp: otp } : {}),
     };
   }
 

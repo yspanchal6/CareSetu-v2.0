@@ -89,7 +89,7 @@ export default function GoogleAuthButton({
         }
 
         console.warn('Firebase popup sign-in encountered error, checking fallback mode:', fbErr?.message);
-        
+
         // Fallback for local dev/test environment if Firebase Auth domain is not whitelisted locally
         const syntheticToken = `synthetic-google-token-demo:google.user.${Date.now().toString().slice(-4)}@example.com:Google User:google-sub-${Date.now()}`;
         idToken = syntheticToken;
@@ -105,13 +105,31 @@ export default function GoogleAuthButton({
         showToast("success", res.message || `Welcome, ${res.user.name}.`);
         await setSession(res.user, res.token);
         if (onSuccess) onSuccess();
-        navigate(`/${res.user.role.toLowerCase()}/dashboard`);
+        if (res.isNewUser) {
+          const targetRoute = res.onboardingRoute || (
+            res.user.role.toLowerCase() === 'patient' ? '/patient/profile-completion' :
+              res.user.role.toLowerCase() === 'doctor' ? '/doctor/document-verification' :
+                res.user.role.toLowerCase() === 'hospital' ? '/hospital/profile-verification' :
+                  `/${res.user.role.toLowerCase()}/dashboard`
+          );
+          navigate(targetRoute);
+        } else {
+          navigate(`/${res.user.role.toLowerCase()}/dashboard`);
+        }
       } else {
         const err = res.message || "Google authentication failed.";
         showToast("error", err);
         if (onError) onError(err);
       }
     } catch (err: any) {
+      if (err?.status === 429) {
+        const retryAfter = err?.retryAfterSeconds || 30;
+        const errorMsg = `Too many authentication attempts. Please wait ${retryAfter} seconds before trying again.`;
+        showToast("error", errorMsg);
+        if (onError) onError(errorMsg);
+        return;
+      }
+
       const isUnregistered =
         err?.status === 404 ||
         err?.code === 'ACCOUNT_NOT_REGISTERED' ||

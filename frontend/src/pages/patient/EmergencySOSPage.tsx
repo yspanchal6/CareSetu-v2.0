@@ -168,13 +168,29 @@ export default function EmergencySOSPage() {
 
       setCreated(null);
       setStep("error");
-      setErrorMessage(
-        err?.message?.includes("Location")
-          ? err.message
-          : err?.message
-          ? `${err.message} — Please call 108 for immediate help.`
-          : "SOS failed. Please call 108 for immediate help."
-      );
+      if (err instanceof ApiError) {
+        if (err.status === 401) {
+          setErrorMessage("Authentication session required or expired. Please log in to dispatch an emergency SOS.");
+        } else if (err.status === 403) {
+          setErrorMessage("Insufficient permissions. Emergency SOS is restricted to Patient accounts and active Guest sessions.");
+        } else if (err.status === 409) {
+          setErrorMessage("An emergency SOS request is already active or in progress for your account.");
+        } else if (err.status === 429) {
+          setErrorMessage("Too many SOS requests triggered in a short duration. Please call 108 immediately.");
+        } else if (err.status === 500) {
+          setErrorMessage("Server error encountered while initializing emergency case. Please call 108 immediately.");
+        } else {
+          setErrorMessage(err.message || "Emergency request failed. Please call 108 for immediate help.");
+        }
+      } else {
+        setErrorMessage(
+          err?.message?.includes("Location")
+            ? err.message
+            : err?.message
+            ? `${err.message} — Please call 108 for immediate help.`
+            : "SOS failed. Please call 108 for immediate help."
+        );
+      }
     }
   };
 

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import { User, UserRole } from "../types";
-import { authApi, clearAuthToken, fcmApi, saveAuthToken, SignUpPayload } from "../services/api";
+import { authApi, clearAuthToken, fcmApi, getAuthToken, saveAuthToken, SignUpPayload } from "../services/api";
 import { requestNotificationPermission } from "../utils/firebase";
 import { cacheOfflineProfile, clearOfflineProfile } from "../utils/offlineProfile";
 
@@ -13,6 +13,8 @@ interface AuthContextValue {
   register: (payload: SignUpPayload) => Promise<any>;
   setSession: (user: any, token: string) => Promise<void>;
   startGuestSession: () => Promise<User>;
+  updateUser: (updatedData: any) => void;
+  refreshUser: () => Promise<User | null>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -20,14 +22,59 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
     const saved = sessionStorage.getItem("caresetu_user");
-    return saved ? JSON.parse(saved) : null;
+    return saved && getAuthToken() ? JSON.parse(saved) : null;
   });
 
   const isGuest = Boolean(user?.isGuest || user?.role === "guest");
   const isAuthenticated = Boolean(user);
 
+  const refreshUser = async (): Promise<User | null> => {
+    const token = getAuthToken();
+    if (!token) return null;
+
+    try {
+      const res = await authApi.me();
+      if (res.success && res.user) {
+        const roleStr = res.user.role.toLowerCase() as UserRole;
+        const appUser: User = {
+          id: res.user.id,
+          name: res.user.name || (res.user.email ? res.user.email.split("@")[0] : "User"),
+          email: res.user.email || "",
+          role: roleStr,
+          avatarInitials: (res.user.name || res.user.email || "US").slice(0, 2).toUpperCase(),
+          isGuest: Boolean((res.user as any).isGuest || roleStr === "guest"),
+          isVerified: Boolean(res.user.isVerified),
+          isProfileComplete: Boolean(res.user.isProfileComplete || res.user.isVerified),
+          patient: res.user.patient || user?.patient,
+        };
+        setUser(appUser);
+        sessionStorage.setItem("caresetu_user", JSON.stringify(appUser));
+        cacheOfflineProfile({ name: appUser.name, email: appUser.email });
+        return appUser;
+      }
+    } catch (err: any) {
+      console.warn("[AuthContext] refreshUser failed:", err?.message || err);
+    }
+    return user;
+  };
+
+  const updateUser = (updatedData: any) => {
+    setUser((prev) => {
+      if (!prev) return prev;
+      const updatedUser: User = {
+        ...prev,
+        ...updatedData,
+        isVerified: updatedData?.isVerified ?? updatedData?.isProfileComplete ?? prev.isVerified,
+        isProfileComplete: updatedData?.isProfileComplete ?? updatedData?.isVerified ?? prev.isProfileComplete,
+        patient: updatedData?.patient ? { ...prev.patient, ...updatedData.patient } : prev.patient,
+      };
+      sessionStorage.setItem("caresetu_user", JSON.stringify(updatedUser));
+      return updatedUser;
+    });
+  };
+
   useEffect(() => {
-    const token = localStorage.getItem('jwt');
+    const token = getAuthToken();
     if (token && !user) {
       // When offline, trust the cached session instead of calling /api/auth/me
       // which would fail and incorrectly log the user out.
@@ -50,6 +97,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               role: roleStr,
               avatarInitials: (res.user.name || res.user.email || "GU").slice(0, 2).toUpperCase(),
               isGuest: Boolean((res.user as any).isGuest || roleStr === "guest"),
+              isVerified: Boolean(res.user.isVerified),
+              isProfileComplete: Boolean(res.user.isProfileComplete || res.user.isVerified),
+              patient: res.user.patient,
             };
             setUser(appUser);
             sessionStorage.setItem("caresetu_user", JSON.stringify(appUser));
@@ -103,9 +153,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         name: res.user.name || res.user.email.split("@")[0],
         email: res.user.email,
         role: roleStr,
-        avatarInitials: (res.user.name || res.user.email).slice(0, 2).toUpperCase()
+        avatarInitials: (res.user.name || res.user.email).slice(0, 2).toUpperCase(),
+        isVerified: Boolean(res.user.isVerified),
+        isProfileComplete: Boolean(res.user.isProfileComplete || res.user.isVerified),
+        patient: res.user.patient,
       };
-      
+
       setUser(appUser);
       sessionStorage.setItem("caresetu_user", JSON.stringify(appUser));
       saveAuthToken(res.token);
@@ -120,7 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (e: any) {
         console.warn("[FCM] Registration failed:", e.message);
       }
-      
+
       cacheOfflineProfile({ name: appUser.name, email: appUser.email });
       return appUser;
     }
@@ -144,9 +197,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         name: res.user.name || res.user.email.split("@")[0],
         email: res.user.email,
         role: roleStr,
-        avatarInitials: (res.user.name || res.user.email).slice(0, 2).toUpperCase()
+        avatarInitials: (res.user.name || res.user.email).slice(0, 2).toUpperCase(),
+        isVerified: Boolean(res.user.isVerified),
+        isProfileComplete: Boolean(res.user.isProfileComplete || res.user.isVerified),
+        patient: res.user.patient,
       };
-      
+
       setUser(appUser);
       sessionStorage.setItem("caresetu_user", JSON.stringify(appUser));
       saveAuthToken(res.token);
@@ -161,7 +217,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (e: any) {
         console.warn("[FCM] Registration failed:", e.message);
       }
-      
+
       cacheOfflineProfile({ name: appUser.name, email: appUser.email });
       return appUser;
     }
@@ -169,15 +225,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const setSession = async (resUser: any, token: string) => {
-    const roleStr = resUser.role.toLowerCase() as UserRole;
+    const roleStr = (resUser.role || "patient").toLowerCase() as UserRole;
     const appUser: User = {
       id: resUser.id,
-      name: resUser.name || resUser.email.split("@")[0],
-      email: resUser.email,
+      name: resUser.name || (resUser.email ? resUser.email.split("@")[0] : "User"),
+      email: resUser.email || "",
       role: roleStr,
-      avatarInitials: (resUser.name || resUser.email).slice(0, 2).toUpperCase()
+      avatarInitials: (resUser.name || resUser.email || "US").slice(0, 2).toUpperCase(),
+      isVerified: Boolean(resUser.isVerified),
+      isProfileComplete: Boolean(resUser.isProfileComplete || resUser.isVerified),
+      patient: resUser.patient,
     };
-    
+
     setUser(appUser);
     sessionStorage.setItem("caresetu_user", JSON.stringify(appUser));
     saveAuthToken(token);
@@ -196,7 +255,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     cacheOfflineProfile({ name: appUser.name, email: appUser.email });
   };
 
-  return <AuthContext.Provider value={{ user, isGuest, isAuthenticated, login, logout, register, setSession, startGuestSession }}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ user, isGuest, isAuthenticated, login, logout, register, setSession, startGuestSession, updateUser, refreshUser }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {

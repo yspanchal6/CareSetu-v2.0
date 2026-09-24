@@ -314,100 +314,228 @@ export function AdminUsersPage() {
 }
 
 export function AdminHospitalsPage() {
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [query, setQuery] = useState("");
-  const [hospitals, setHospitals] = useState<any[]>([]);
+  const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedUser, setSelectedUser] = useState<any>(null);
-  const [modalType, setModalType] = useState<"block" | "unblock" | null>(null);
 
-  const loadHospitals = useCallback(async () => {
+  // Modals state
+  const [inspectHospital, setInspectHospital] = useState<any>(null);
+  const [rejectHospitalItem, setRejectHospitalItem] = useState<any>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [blockModalType, setBlockModalType] = useState<"block" | "unblock" | null>(null);
+
+  const loadVerificationRequests = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await adminApi.getHospitals(query);
-      setHospitals(res.hospitals || []);
+      const res = await adminApi.getHospitalVerificationRequests(statusFilter, query);
+      setRequests(res.requests || []);
     } catch (err) {
-      console.error("[AdminHospitals] Error:", err);
+      console.error("[AdminHospitals] Verification load error:", err);
     } finally {
       setLoading(false);
     }
-  }, [query]);
+  }, [statusFilter, query]);
 
   useEffect(() => {
-    const timer = setTimeout(loadHospitals, 300);
+    const timer = setTimeout(loadVerificationRequests, 300);
     return () => clearTimeout(timer);
-  }, [loadHospitals]);
+  }, [loadVerificationRequests]);
+
+  const handleApprove = async (hospitalId: string) => {
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      await adminApi.approveHospital(hospitalId);
+      setInspectHospital(null);
+      await loadVerificationRequests();
+    } catch (err: any) {
+      setActionError(err.message || "Failed to approve hospital verification request.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleRejectSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rejectReason.trim()) {
+      setActionError("Rejection feedback reason is required.");
+      return;
+    }
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      await adminApi.rejectHospital(rejectHospitalItem.id || rejectHospitalItem.hospitalId, rejectReason.trim());
+      setRejectHospitalItem(null);
+      setRejectReason("");
+      setInspectHospital(null);
+      await loadVerificationRequests();
+    } catch (err: any) {
+      setActionError(err.message || "Failed to submit rejection feedback.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="w-full sm:w-80">
-        <SearchInput placeholder="Search hospitals by facility name..." value={query} onChange={(e) => setQuery(e.target.value)} />
+      {/* Header & Status Filter Tabs */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-100 shadow-xs">
+        <div className="flex flex-wrap gap-1.5">
+          {[
+            { id: "ALL", label: "All Hospitals" },
+            { id: "PENDING_REVIEW", label: "Pending Review" },
+            { id: "APPROVED", label: "Approved" },
+            { id: "REJECTED", label: "Rejected" },
+            { id: "BLOCKED", label: "Blocked" },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setStatusFilter(tab.id)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                statusFilter === tab.id
+                  ? "bg-navy text-white shadow-xs"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="w-full sm:w-72">
+          <SearchInput
+            placeholder="Search name, city, email..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
       </div>
 
+      {/* Main Table */}
       <Card padded={false} className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-text-secondary text-xs uppercase">
             <tr>
               <th className="text-left px-4 py-3 font-semibold">Hospital Facility</th>
-              <th className="text-left px-4 py-3 font-semibold">Address / Contact</th>
-              <th className="text-left px-4 py-3 font-semibold">Status</th>
-              <th className="text-left px-4 py-3 font-semibold">Restriction</th>
-              <th className="text-right px-4 py-3 font-semibold">Actions</th>
+              <th className="text-left px-4 py-3 font-semibold">Address & Coordinates</th>
+              <th className="text-left px-4 py-3 font-semibold">Uploaded Documents</th>
+              <th className="text-left px-4 py-3 font-semibold">Verification Status</th>
+              <th className="text-right px-4 py-3 font-semibold">Admin Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-slate-400">Loading hospital facilities...</td>
+                <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                  Loading hospital verification requests...
+                </td>
               </tr>
-            ) : hospitals.length === 0 ? (
+            ) : requests.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-slate-400">No hospital facilities found.</td>
+                <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                  No hospital verification requests found for this filter.
+                </td>
               </tr>
             ) : (
-              hospitals.map((h) => {
-                const isBlocked = h.status === "BLOCKED";
+              requests.map((item) => {
+                const isApproved = item.verificationStatus === "APPROVED";
+                const isPending = item.verificationStatus === "PENDING_REVIEW";
+                const isRejected = item.verificationStatus === "REJECTED";
+                const isBlocked = item.verificationStatus === "BLOCKED";
+
                 return (
-                  <tr key={h.id} className="border-t border-slate-50 hover:bg-slate-50/50">
-                    <td className="px-4 py-3 font-medium text-navy">
-                      <p className="font-bold text-navy">{h.name}</p>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-600">
-                      <p>{h.address || "No address"}</p>
-                      <p className="text-slate-400">{h.phone}</p>
-                    </td>
+                  <tr key={item.id} className="border-t border-slate-50 hover:bg-slate-50/50">
                     <td className="px-4 py-3">
-                      <Badge tone={isBlocked ? "critical" : "available"}>
-                        {isBlocked ? "BLOCKED" : h.status}
+                      <p className="font-bold text-navy">{item.name}</p>
+                      <p className="text-xs text-slate-500">{item.email}</p>
+                      <p className="text-xs text-slate-400">{item.phone}</p>
+                    </td>
+
+                    <td className="px-4 py-3 text-xs text-slate-600">
+                      <p className="font-medium text-navy">{item.address || "No street address"}</p>
+                      <p className="text-slate-500">{item.city}{item.state ? `, ${item.state}` : ""}</p>
+                      {item.location?.latitude && item.location?.longitude ? (
+                        <p className="font-mono text-[11px] text-slate-400">
+                          GPS: ({Number(item.location.latitude).toFixed(3)}, {Number(item.location.longitude).toFixed(3)})
+                        </p>
+                      ) : null}
+                    </td>
+
+                    <td className="px-4 py-3 text-xs">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 font-semibold text-slate-700 text-[11px]">
+                        📄 {item.documents?.length || 0} File{(item.documents?.length || 0) !== 1 ? "s" : ""}
+                      </span>
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <Badge
+                        tone={
+                          isApproved ? "available" : isPending ? "busy" : isRejected ? "critical" : "critical"
+                        }
+                      >
+                        {item.verificationStatus}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-500 max-w-xs truncate">
-                      {isBlocked ? (h.activeRestriction?.reason || "Restricted by admin") : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {isBlocked ? (
-                        <Button
-                          variant="success"
-                          size="sm"
-                          icon={<ShieldOff className="w-3.5 h-3.5" />}
-                          onClick={() => {
-                            setSelectedUser({ id: h.userId, name: h.name, email: h.name, activeRestriction: h.activeRestriction });
-                            setModalType("unblock");
-                          }}
-                        >
-                          Unblock
-                        </Button>
-                      ) : (
+
+                    <td className="px-4 py-3 text-right space-x-1.5 whitespace-nowrap">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setInspectHospital(item)}
+                      >
+                        Review / Inspect
+                      </Button>
+
+                      {isPending && (
+                        <>
+                          <Button
+                            variant="success"
+                            size="sm"
+                            onClick={() => handleApprove(item.id || item.hospitalId)}
+                          >
+                            Approve
+                          </Button>
+
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-red-600 border-red-200 hover:bg-red-50"
+                            onClick={() => setRejectHospitalItem(item)}
+                          >
+                            Reject
+                          </Button>
+                        </>
+                      )}
+
+                      {!isBlocked && !isPending && (
                         <Button
                           variant="outline"
                           size="sm"
                           className="text-red-600 border-red-200 hover:bg-red-50"
-                          icon={<ShieldAlert className="w-3.5 h-3.5" />}
                           onClick={() => {
-                            setSelectedUser({ id: h.userId, name: h.name, email: h.name, role: "HOSPITAL" });
-                            setModalType("block");
+                            setSelectedUser({ id: item.userId, name: item.name, role: "HOSPITAL" });
+                            setBlockModalType("block");
                           }}
                         >
                           Block
+                        </Button>
+                      )}
+
+                      {isBlocked && (
+                        <Button
+                          variant="success"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedUser({ id: item.userId, name: item.name, role: "HOSPITAL" });
+                            setBlockModalType("unblock");
+                          }}
+                        >
+                          Unblock
                         </Button>
                       )}
                     </td>
@@ -419,11 +547,131 @@ export function AdminHospitalsPage() {
         </table>
       </Card>
 
-      {modalType === "block" && selectedUser && (
-        <BlockModal user={selectedUser} onClose={() => setModalType(null)} onSuccess={loadHospitals} />
+      {/* Detailed Inspection Modal */}
+      {inspectHospital && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-6 border border-slate-100 flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="font-bold text-navy text-lg">{inspectHospital.name}</h3>
+                <p className="text-xs text-slate-500">Hospital Application Details & Document Audit</p>
+              </div>
+              <button
+                onClick={() => setInspectHospital(null)}
+                className="text-slate-400 hover:text-navy text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="bg-slate-50 p-3 rounded-xl">
+                <p className="font-semibold text-slate-500">Contact Details</p>
+                <p className="font-bold text-navy mt-1">{inspectHospital.email}</p>
+                <p className="text-slate-700">{inspectHospital.phone}</p>
+              </div>
+
+              <div className="bg-slate-50 p-3 rounded-xl">
+                <p className="font-semibold text-slate-500">Location Coordinates</p>
+                <p className="font-bold text-navy mt-1">{inspectHospital.address}</p>
+                <p className="text-slate-700">
+                  {inspectHospital.city}, {inspectHospital.state}
+                </p>
+              </div>
+            </div>
+
+            {/* Uploaded Documents List */}
+            <div className="space-y-2">
+              <p className="font-bold text-navy text-xs uppercase tracking-wider">Uploaded Documents ({inspectHospital.documents?.length || 0})</p>
+              {(!inspectHospital.documents || inspectHospital.documents.length === 0) ? (
+                <p className="text-xs text-slate-400 italic">No documents uploaded during initial onboarding.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {inspectHospital.documents.map((doc: any) => (
+                    <div key={doc.id} className="flex items-center justify-between bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs">
+                      <div>
+                        <p className="font-bold text-navy">{doc.title || doc.documentType}</p>
+                        <p className="text-[11px] text-slate-400">Uploaded {new Date(doc.createdAt).toLocaleDateString()}</p>
+                      </div>
+                      <Badge tone="available">
+                        {doc.documentType}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Admin Action Buttons */}
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              {inspectHospital.verificationStatus === "PENDING_REVIEW" && (
+                <>
+                  <Button
+                    variant="outline"
+                    className="text-red-600 border-red-200"
+                    onClick={() => setRejectHospitalItem(inspectHospital)}
+                  >
+                    Reject Application
+                  </Button>
+                  <Button
+                    variant="success"
+                    disabled={actionLoading}
+                    onClick={() => handleApprove(inspectHospital.id || inspectHospital.hospitalId)}
+                  >
+                    Approve Application
+                  </Button>
+                </>
+              )}
+              <Button variant="ghost" onClick={() => setInspectHospital(null)}>
+                Close Inspection
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
-      {modalType === "unblock" && selectedUser && (
-        <UnblockModal user={selectedUser} onClose={() => setModalType(null)} onSuccess={loadHospitals} />
+
+      {/* Rejection Feedback Modal */}
+      {rejectHospitalItem && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <form onSubmit={handleRejectSubmit} className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 border border-slate-100 flex flex-col gap-4">
+            <h3 className="font-bold text-navy text-lg">Reject Hospital Application</h3>
+            <p className="text-xs text-slate-600">
+              Please provide clear feedback explaining why <strong>{rejectHospitalItem.name}</strong> requires correction.
+            </p>
+
+            {actionError && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700">
+                {actionError}
+              </div>
+            )}
+
+            <textarea
+              className="w-full border border-slate-200 rounded-xl p-3 text-xs focus:ring-2 focus:ring-primary outline-none"
+              rows={4}
+              placeholder="Enter feedback for hospital user (e.g. Invalid registration license uploaded. Upload clear PDF)..."
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              required
+            />
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="ghost" onClick={() => setRejectHospitalItem(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" className="bg-red-600 hover:bg-red-700" disabled={actionLoading}>
+                {actionLoading ? "Submitting..." : "Submit Rejection Feedback"}
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Block & Unblock Modals */}
+      {blockModalType === "block" && selectedUser && (
+        <BlockModal user={selectedUser} onClose={() => setBlockModalType(null)} onSuccess={loadVerificationRequests} />
+      )}
+      {blockModalType === "unblock" && selectedUser && (
+        <UnblockModal user={selectedUser} onClose={() => setBlockModalType(null)} onSuccess={loadVerificationRequests} />
       )}
     </div>
   );

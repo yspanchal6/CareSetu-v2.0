@@ -30,12 +30,23 @@ export function HospitalMatchingRequestsPage() {
     return () => clearInterval(interval);
   }, [loadRequests]);
 
+  const [processingCaseId, setProcessingCaseId] = useState<string | null>(null);
+
   const handleAccept = async (caseId: string) => {
+    if (processingCaseId) return;
+    setProcessingCaseId(caseId);
     try {
       await hospitalApi.acceptCase(caseId);
       loadRequests();
     } catch (err: any) {
-      alert(err.message || "Failed to accept case");
+      let msg = err?.message || "Failed to accept case";
+      if (err?.status === 401) msg = "Your session has expired. Please log in again.";
+      else if (err?.status === 403) msg = err?.message || "You are not authorized to accept this emergency case.";
+      else if (err?.status === 409) msg = "This emergency case has already been accepted or is no longer available.";
+      else if (err?.status === 404) msg = "Emergency case not found.";
+      alert(msg);
+    } finally {
+      setProcessingCaseId(null);
     }
   };
 

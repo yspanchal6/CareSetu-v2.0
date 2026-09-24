@@ -87,7 +87,7 @@ function buildCaseSnapshot(emergencyCase, hospitalRequests = []) {
   };
 }
 
-const createEmergencyCase = async ({ userId, emergencyType, severity, latitude, longitude, symptoms, idempotencyKey, source }) => {
+const createEmergencyCase = async ({ userId, emergencyType, severity, latitude, longitude, symptoms, idempotencyKey, source, patientMedicalHistory }) => {
   // 0. Idempotency Check
   if (idempotencyKey) {
     const existingCase = await emergencyRepository.getEmergencyCaseByIdempotencyKey(idempotencyKey);
@@ -245,7 +245,14 @@ const createEmergencyCase = async ({ userId, emergencyType, severity, latitude, 
         const hospitalUserId = hospital.userId;
         const distanceStr = m.distanceKm != null ? m.distanceKm.toFixed(1) : 'N/A';
 
-        // Minimal Emergency Socket Payload (Priority 2: Privacy Safeguard)
+        const rawBloodGroup = patient?.bloodGroup ? String(patient.bloodGroup).trim() : null;
+        const bloodGroup = rawBloodGroup || patientMedicalHistory?.bloodGroup || null;
+
+        const rawKnownConditions = (patient?.medicalConditions ? String(patient.medicalConditions).trim() : null) ||
+                                    (patient?.conditions ? String(patient.conditions).trim() : null);
+        const knownConditions = rawKnownConditions || patientMedicalHistory?.knownConditions || null;
+
+        // Emergency Socket Payload for Hospital Alert
         const payload = {
           caseId: emergencyCase.caseId,
           publicCaseId: emergencyCase.caseId,
@@ -255,11 +262,16 @@ const createEmergencyCase = async ({ userId, emergencyType, severity, latitude, 
           source: emergencyCase.source || 'DIRECT',
           distanceKm: m.distanceKm,
           hospitalRequestId: requestsData.find(r => r.hospitalId === hospital.id)?.id,
+          bloodGroup: bloodGroup,
+          knownConditions: knownConditions,
           patientInfo: {
             name: patient.name,
             age: patient.age,
             gender: patient.gender,
             phone: patient.phone,
+            bloodGroup: bloodGroup,
+            knownConditions: knownConditions,
+            medicalConditions: knownConditions,
           },
           patientLocation: {
             latitude: Number(latitude),
@@ -317,7 +329,14 @@ const createEmergencyCase = async ({ userId, emergencyType, severity, latitude, 
                 token: token.token,
                 title: `🚨 Emergency: ${emergencyCase.caseId}`,
                 body: `${emergencyCase.severity} - ${emergencyCase.symptoms || 'Emergency'}`,
-                data: { caseId: emergencyCase.caseId },
+                data: {
+                  caseId: emergencyCase.caseId,
+                  distanceKm: m.distanceKm != null ? String(m.distanceKm) : '0',
+                  bloodGroup: bloodGroup !== null ? String(bloodGroup) : 'Not provided',
+                  knownConditions: knownConditions !== null ? String(knownConditions) : 'Not provided',
+                  blood_group: bloodGroup || 'Not provided',
+                  medical_conditions: knownConditions || 'Not provided',
+                },
               }).catch(err => console.error(`[FCM] Push failed:`, err.message));
             });
           }).catch(err => console.error(`[FCM Token Lookup] Failed:`, err.message));
@@ -329,10 +348,24 @@ const createEmergencyCase = async ({ userId, emergencyType, severity, latitude, 
 
     const firstHospital = matchedHospitals[0]?.hospital;
     if (firstHospital && firstHospital.userId) {
+      const rawBloodGroup = patient?.bloodGroup ? String(patient.bloodGroup).trim() : null;
+      const bloodGroup = rawBloodGroup || patientMedicalHistory?.bloodGroup || null;
+      const rawKnownConditions = (patient?.medicalConditions ? String(patient.medicalConditions).trim() : null) ||
+                                  (patient?.conditions ? String(patient.conditions).trim() : null);
+      const knownConditions = rawKnownConditions || patientMedicalHistory?.knownConditions || null;
+
       notificationService.notifyHospital(
         firstHospital.userId,
         `An emergency case (${emergencyCase.caseId}) requires your immediate attention.`,
-        { emergencyCaseId: emergencyCase.id },
+        {
+          emergencyCaseId: emergencyCase.id,
+          caseId: emergencyCase.caseId,
+          distanceKm: matchedHospitals[0]?.distanceKm != null ? String(matchedHospitals[0].distanceKm) : '0',
+          bloodGroup: bloodGroup,
+          knownConditions: knownConditions,
+          blood_group: bloodGroup || 'Not provided',
+          medical_conditions: knownConditions || 'Not provided',
+        },
         firstHospital.phone
       ).catch(err => console.error('[NotifyHospital] Non-blocking warning:', err.message));
     }

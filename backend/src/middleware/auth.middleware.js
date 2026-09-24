@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const prisma = require('../config/prisma');
 
 const authMiddleware = (req, res, next) => {
   try {
@@ -32,6 +33,17 @@ const authMiddleware = (req, res, next) => {
     const secret = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
     const decoded = jwt.verify(token, secret);
     req.user = decoded;
+    if (req.user && !req.user.userId && req.user.id) {
+      req.user.userId = req.user.id;
+    }
+    if (req.path === '/sos' && req.baseUrl === '/api/emergency') {
+      console.info('[API Auth Diagnostic]', {
+        userId: req.user.userId || req.user.id || null,
+        role: req.user.role || null,
+        requestPath: req.originalUrl,
+        hasAuthorizationHeader: Boolean(authHeader || req.headers['x-auth-token'] || req.cookies?.token),
+      });
+    }
     next();
 
   } catch (err) {
@@ -44,11 +56,45 @@ const authMiddleware = (req, res, next) => {
 
 // Middleware: require specific role
 const requireRole = (...roles) => {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
-    if (roles.length && !roles.includes(req.user.role)) {
+    const allowedRoles = roles.map(r => String(r).toUpperCase());
+    const tokenRole = String(req.user.role || '').toUpperCase();
+    const userId = req.user.userId || req.user.id || req.user.sub;
+    const isGuestSession = Boolean(req.user.isGuest || req.user.isGuestSession || tokenRole === 'GUEST');
+
+    let userRole = tokenRole;
+    if (userId) {
+      const dbUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { role: true, status: true },
+      });
+      if (!dbUser) {
+        return res.status(401).json({ error: 'Authenticated user no longer exists.' });
+      }
+      if (dbUser.status !== 'ACTIVE') {
+        return res.status(403).json({ error: 'Account is not active.' });
+      }
+      if (isGuestSession && (allowedRoles.includes('GUEST') || allowedRoles.includes('PATIENT'))) {
+        req.user.role = 'GUEST';
+        return next();
+      }
+      userRole = String(dbUser.role || '').toUpperCase();
+      req.user.role = userRole;
+    }
+
+    if (allowedRoles.length && !allowedRoles.includes(userRole)) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[Auth] 🛑 Permission denied in requireRole:', {
+          userId,
+          tokenRole,
+          userRole,
+          allowedRoles,
+          hasUserId: Boolean(req.user.userId || req.user.id),
+        });
+      }
       return res.status(403).json({ error: `Insufficient permissions. Access restricted.` });
     }
     next();
@@ -62,10 +108,12 @@ const requireSelfOrAdmin = (paramKey = 'userId') => {
       return res.status(401).json({ error: 'Not authenticated' });
     }
     const targetUserId = req.params[paramKey] || req.body[paramKey] || req.query[paramKey];
-    if (req.user.role === 'ADMIN') {
+    const userRole = String(req.user.role || '').toUpperCase();
+    const currentUserId = req.user.userId || req.user.id || req.user.sub;
+    if (userRole === 'ADMIN') {
       return next();
     }
-    if (targetUserId && targetUserId !== req.user.userId) {
+    if (targetUserId && targetUserId !== currentUserId) {
       return res.status(403).json({ error: 'Access denied. You can only access your own account resources.' });
     }
     next();
@@ -82,3 +130,4 @@ module.exports = {
   requireSelfOrAdmin,
   denyGuest,
 };
+

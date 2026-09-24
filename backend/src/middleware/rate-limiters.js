@@ -1,4 +1,5 @@
 const rateLimit = require('express-rate-limit');
+const crypto = require('crypto');
 const logger = require('../utils/logger');
 
 // Optional Redis store integration for load-balanced distributed deployments
@@ -19,61 +20,90 @@ if (process.env.REDIS_URL && process.env.NODE_ENV !== 'test') {
 }
 
 /**
- * Key generator combining IP address, authenticated User ID, or target account email
+ * Creates a rate limit key generator scoped by category, client IP, and authenticated user ID.
  */
-const rateLimitKeyGenerator = (req) => {
-  const clientIp = req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1';
+const createRateLimitKeyGenerator = (category = 'general') => (req) => {
+  const clientIp = req.ip || req.socket?.remoteAddress || '127.0.0.1';
   const targetId = req.user?.userId || req.user?.id || req.body?.email || req.body?.username || 'anonymous';
-  return `${clientIp}:${targetId}`;
+  return `${category}:${clientIp}:${targetId}`;
 };
 
 /**
- * Handler for HTTP 429 rate limit exceeded
+ * Creates a safe, non-sensitive rate limit handler that logs diagnostics and sets Retry-After.
  */
-const rateLimitHandler = (req, res, next, options) => {
+const createRateLimitHandler = (category = 'general') => (req, res, next, options) => {
   const retryAfterSeconds = Math.ceil(options.windowMs / 1000);
   res.setHeader('Retry-After', retryAfterSeconds);
-  logger.warn('Rate limit exceeded', {
+
+  // Safe SHA-256 user hash (never log actual email, tokens, passwords, or medical data)
+  const rawUserId = req.user?.userId || req.user?.id || req.body?.email;
+  const userHash = rawUserId
+    ? crypto.createHash('sha256').update(String(rawUserId)).digest('hex').slice(0, 10)
+    : 'anonymous';
+
+  logger.warn('[RateLimitExceeded]', {
+    category,
+    endpoint: req.originalUrl || req.path,
+    method: req.method,
+    userHash,
+    role: req.user?.role || 'UNAUTHENTICATED',
     ip: req.ip,
-    path: req.originalUrl,
-    userId: req.user?.userId || req.body?.email,
+    retryAfterSeconds,
+    correlationId: req.correlationId || req.headers?.['x-correlation-id'] || 'n/a',
   });
+
   return res.status(429).json({
     success: false,
     error: options.message?.error || 'Too many requests. Please wait before trying again.',
     code: 'TOO_MANY_REQUESTS',
     retryAfterSeconds,
+    category,
   });
 };
 
 /**
- * General API Limiter (100 requests per 15 minutes)
+ * General API Limiter (300 requests per 15 minutes)
  */
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === 'test' ? 10000 : 100,
+  max: process.env.NODE_ENV === 'test' ? 10000 : 300,
   standardHeaders: true,
   legacyHeaders: false,
   store: redisStore,
   validate: false,
-  keyGenerator: rateLimitKeyGenerator,
-  handler: rateLimitHandler,
-  message: { error: 'Too many requests to CareSetu API. Please try again later.' },
+  keyGenerator: createRateLimitKeyGenerator('api'),
+  handler: createRateLimitHandler('api'),
+  message: { error: 'Too many API requests. Please wait a few minutes before trying again.' },
 });
 
 /**
- * Login Rate Limiter (5 requests per 15 minutes per account/IP)
+ * Read-Only Dashboard Limiter (300 requests per 15 minutes)
  */
-const loginRateLimiter = rateLimit({
+const dashboardReadLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: process.env.NODE_ENV === 'test' ? 10000 : 300,
   standardHeaders: true,
   legacyHeaders: false,
   store: redisStore,
   validate: false,
-  keyGenerator: rateLimitKeyGenerator,
-  handler: rateLimitHandler,
-  message: { error: 'Too many login attempts. Please try again after 15 minutes.' },
+  keyGenerator: createRateLimitKeyGenerator('dashboard_read'),
+  handler: createRateLimitHandler('dashboard_read'),
+  message: { error: 'Dashboard request limit reached. Please wait before refreshing.' },
+});
+
+/**
+ * Authentication Limiter (15 requests per 15 minutes per account/IP)
+ */
+const loginRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'test' ? 10000 : 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: redisStore,
+  validate: false,
+  keyGenerator: createRateLimitKeyGenerator('auth'),
+  handler: createRateLimitHandler('auth'),
+  message: { error: 'Too many authentication attempts. Please try again after 15 minutes.' },
 });
 
 /**
@@ -81,14 +111,14 @@ const loginRateLimiter = rateLimit({
  */
 const registerRateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: 50,
+  max: process.env.NODE_ENV === 'test' ? 10000 : 50,
   skip: () => process.env.NODE_ENV === 'test',
   standardHeaders: true,
   legacyHeaders: false,
   store: redisStore,
   validate: false,
-  keyGenerator: rateLimitKeyGenerator,
-  handler: rateLimitHandler,
+  keyGenerator: createRateLimitKeyGenerator('register'),
+  handler: createRateLimitHandler('register'),
   message: { error: 'Too many registration requests. Please try again later.' },
 });
 
@@ -103,8 +133,8 @@ const otpEmailLimiter = rateLimit({
   legacyHeaders: false,
   store: redisStore,
   validate: false,
-  keyGenerator: rateLimitKeyGenerator,
-  handler: rateLimitHandler,
+  keyGenerator: createRateLimitKeyGenerator('otp_email'),
+  handler: createRateLimitHandler('otp_email'),
   message: { error: 'Too many Email OTP requests. Please wait 15 minutes before requesting a new code.' },
 });
 
@@ -119,8 +149,8 @@ const otpSmsLimiter = rateLimit({
   legacyHeaders: false,
   store: redisStore,
   validate: false,
-  keyGenerator: rateLimitKeyGenerator,
-  handler: rateLimitHandler,
+  keyGenerator: createRateLimitKeyGenerator('otp_sms'),
+  handler: createRateLimitHandler('otp_sms'),
   message: { error: 'Too many SMS OTP requests. Please wait 15 minutes before requesting a new code.' },
 });
 
@@ -135,9 +165,25 @@ const otpVerifyLimiter = rateLimit({
   legacyHeaders: false,
   store: redisStore,
   validate: false,
-  keyGenerator: rateLimitKeyGenerator,
-  handler: rateLimitHandler,
+  keyGenerator: createRateLimitKeyGenerator('otp_verify'),
+  handler: createRateLimitHandler('otp_verify'),
   message: { error: 'Maximum verification attempts exceeded. Please request a new code.' },
+});
+
+/**
+ * Sensitive Write Limiter (30 requests per 15 minutes)
+ */
+const sensitiveWriteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'test' ? 10000 : 30,
+  skip: () => process.env.NODE_ENV === 'test',
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: redisStore,
+  validate: false,
+  keyGenerator: createRateLimitKeyGenerator('sensitive_write'),
+  handler: createRateLimitHandler('sensitive_write'),
+  message: { error: 'Action rate limit reached. Please wait a few minutes before trying again.' },
 });
 
 /**
@@ -151,8 +197,8 @@ const docUploadLimiter = rateLimit({
   legacyHeaders: false,
   store: redisStore,
   validate: false,
-  keyGenerator: rateLimitKeyGenerator,
-  handler: rateLimitHandler,
+  keyGenerator: createRateLimitKeyGenerator('doc_upload'),
+  handler: createRateLimitHandler('doc_upload'),
   message: { error: 'Document upload limit reached for this hour.' },
 });
 
@@ -167,8 +213,8 @@ const docDownloadLimiter = rateLimit({
   legacyHeaders: false,
   store: redisStore,
   validate: false,
-  keyGenerator: rateLimitKeyGenerator,
-  handler: rateLimitHandler,
+  keyGenerator: createRateLimitKeyGenerator('doc_download'),
+  handler: createRateLimitHandler('doc_download'),
   message: { error: 'Too many document download requests. Please try again later.' },
 });
 
@@ -183,29 +229,32 @@ const aiChatLimiter = rateLimit({
   legacyHeaders: false,
   store: redisStore,
   validate: false,
-  keyGenerator: rateLimitKeyGenerator,
-  handler: rateLimitHandler,
+  keyGenerator: createRateLimitKeyGenerator('ai_chat'),
+  handler: createRateLimitHandler('ai_chat'),
   message: { error: 'AI Assistant rate limit reached. Please wait a few minutes before asking more questions.' },
 });
 
 /**
- * Admin Action Limiter (30 requests per 15 minutes)
+ * Admin Action Limiter (60 requests per 15 minutes)
  */
 const adminLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === 'test' ? 10000 : 30,
+  max: process.env.NODE_ENV === 'test' ? 10000 : 60,
   skip: () => process.env.NODE_ENV === 'test',
   standardHeaders: true,
   legacyHeaders: false,
   store: redisStore,
   validate: false,
-  keyGenerator: rateLimitKeyGenerator,
-  handler: rateLimitHandler,
+  keyGenerator: createRateLimitKeyGenerator('admin'),
+  handler: createRateLimitHandler('admin'),
   message: { error: 'Admin endpoint request limit reached.' },
 });
 
 module.exports = {
+  createRateLimitHandler,
+  createRateLimitKeyGenerator,
   apiLimiter,
+  dashboardReadLimiter,
   authLimiter: loginRateLimiter,
   loginRateLimiter,
   registerRateLimiter,
@@ -213,8 +262,8 @@ module.exports = {
   otpSmsLimiter,
   otpVerifyLimiter,
   otpRateLimiter: otpVerifyLimiter,
+  sensitiveWriteLimiter,
   docUploadLimiter,
-
   docDownloadLimiter,
   aiChatLimiter,
   adminLimiter,

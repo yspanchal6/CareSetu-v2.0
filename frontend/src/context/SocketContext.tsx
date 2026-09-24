@@ -1,8 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
 import { useAuth } from "./AuthContext";
-import { hospitalApi } from "../services/api";
-import { SOCKET_URL } from "../services/api";
+import { getAuthToken, hospitalApi, SOCKET_URL } from "../services/api";
 
 /**
  * Emergency events that update the patient tracking experience in real-time.
@@ -40,8 +39,8 @@ const SocketContext = createContext<SocketContextValue>({
   socket: null,
   connected: false,
   popupCase: null,
-  setPopupCase: () => {},
-  subscribeEmergencyEvents: () => () => {},
+  setPopupCase: () => { },
+  subscribeEmergencyEvents: () => () => { },
 });
 
 /**
@@ -61,7 +60,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const listenersRef = useRef<Map<string, Set<EmergencyEventHandler>>>(new Map());
 
   const subscribeEmergencyEvents = (caseId: string, handler: EmergencyEventHandler) => {
-    if (!caseId) return () => {};
+    if (!caseId) return () => { };
     let handlers = listenersRef.current.get(caseId);
     if (!handlers) {
       handlers = new Set();
@@ -78,7 +77,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   useEffect(() => {
-    const token = localStorage.getItem("jwt") || sessionStorage.getItem("caresetu_auth_token");
+    const token = getAuthToken();
 
     // Do not connect socket if there is no user or no token
     if (!token || !user) {
@@ -161,8 +160,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       try {
         const audio = new Audio("/emergency-alert.mp3");
         audio.volume = 0.7;
-        audio.play().catch(() => {});
-      } catch {}
+        audio.play().catch(() => { });
+      } catch { }
     });
 
     newSocket.on("case:assigned-to-us", (callbackPayload: any) => {
@@ -269,11 +268,10 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 </div>
                 <div>
                   <p className="text-slate-500">Severity</p>
-                  <p className={`font-bold ${
-                    popupCase.severity === 'CRITICAL' ? 'text-red-600' :
-                    popupCase.severity === 'HIGH' || popupCase.severity === 'URGENT' ? 'text-orange-600' :
-                    'text-yellow-600'
-                  }`}>{popupCase.severity || 'CRITICAL'}</p>
+                  <p className={`font-bold ${popupCase.severity === 'CRITICAL' ? 'text-red-600' :
+                      popupCase.severity === 'HIGH' || popupCase.severity === 'URGENT' ? 'text-orange-600' :
+                        'text-yellow-600'
+                    }`}>{popupCase.severity || 'CRITICAL'}</p>
                 </div>
                 <div>
                   <p className="text-slate-500">Distance</p>
@@ -283,11 +281,10 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 </div>
                 <div>
                   <p className="text-slate-500">Source</p>
-                  <p className={`px-2 py-0.5 rounded-full text-center font-semibold ${
-                    popupCase.source === 'CHATBOT'
+                  <p className={`px-2 py-0.5 rounded-full text-center font-semibold ${popupCase.source === 'CHATBOT'
                       ? 'bg-blue-100 text-blue-700'
                       : 'bg-red-100 text-red-700'
-                  }`}>
+                    }`}>
                     {popupCase.source === 'CHATBOT' ? '🤖 Chatbot' : '🆘 Direct SOS'}
                   </p>
                 </div>
@@ -323,20 +320,37 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 )}
               </div>
 
-              {popupCase.patientInfo && (
-                <div className="border-t pt-3">
-                  <p className="text-xs text-slate-500 mb-1.5">👤 Patient</p>
-                  <div className="text-xs space-y-1">
-                    <p><strong>{popupCase.patientInfo.name || 'Unknown'}</strong>{popupCase.patientInfo.age != null ? `, ${popupCase.patientInfo.age} yrs` : ''}</p>
-                    {popupCase.patientInfo.bloodGroup && (
-                      <p>Blood: <strong>{popupCase.patientInfo.bloodGroup}</strong></p>
-                    )}
-                    {popupCase.patientInfo.medicalHistory && (
-                      <p className="text-slate-600">{popupCase.patientInfo.medicalHistory}</p>
-                    )}
+              {/* Patient Section */}
+              <div className="border-t pt-3">
+                <p className="text-xs text-slate-500 mb-1">👤 Patient</p>
+                <div className="text-xs font-semibold text-navy">
+                  <span className="font-bold text-sm">
+                    {popupCase.patientInfo?.name || popupCase.patientName || popupCase.patient?.name || 'Not provided'}
+                  </span>
+                  {(popupCase.patientInfo?.age ?? popupCase.patientAge ?? popupCase.patient?.age) != null ? `, ${popupCase.patientInfo?.age ?? popupCase.patientAge ?? popupCase.patient?.age} yrs` : ''}
+                </div>
+              </div>
+
+              {/* Medical History Section */}
+              <div className="border-t pt-3">
+                <p className="text-xs font-semibold text-slate-500 mb-2 flex items-center gap-1">
+                  🩺 Medical History
+                </p>
+                <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <p className="text-slate-500 text-[11px]">Blood Group</p>
+                    <p className="font-bold text-rose-600 mt-0.5">
+                      {(popupCase.bloodGroup || popupCase.blood_group || popupCase.patientInfo?.bloodGroup || popupCase.patientInfo?.blood_group)?.trim() || 'Not provided'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500 text-[11px]">Known Conditions</p>
+                    <p className="font-semibold text-navy mt-0.5 leading-snug">
+                      {(popupCase.knownConditions || popupCase.medicalConditions || popupCase.medical_conditions || popupCase.patientInfo?.knownConditions || popupCase.patientInfo?.medicalConditions || popupCase.patientInfo?.medical_conditions || popupCase.patientInfo?.medicalHistory)?.trim() || 'Not provided'}
+                    </p>
                   </div>
                 </div>
-              )}
+              </div>
 
               <div className="flex gap-2 pt-3 border-t">
                 <button

@@ -49,7 +49,21 @@ const loginSchema = z.object({
 });
 
 const userWithProfile = {
-  patient: { select: { id: true, name: true } },
+  patient: {
+    select: {
+      id: true,
+      name: true,
+      age: true,
+      gender: true,
+      phone: true,
+      bloodGroup: true,
+      allergies: true,
+      medicalConditions: true,
+      conditions: true,
+      medications: true,
+      emergencyContacts: true,
+    },
+  },
   hospital: { select: { id: true, name: true, location: true } },
 };
 
@@ -424,12 +438,22 @@ exports.googleAuth = async (req, res, next) => {
     });
 
     const token = await createToken(user);
+    let onboardingRoute = `/${user.role.toLowerCase()}/dashboard`;
+    if (user.role === 'PATIENT') {
+      onboardingRoute = '/patient/profile-completion';
+    } else if (user.role === 'DOCTOR') {
+      onboardingRoute = '/doctor/document-verification';
+    } else if (user.role === 'HOSPITAL') {
+      onboardingRoute = '/hospital/profile-verification';
+    }
+
     res.json({
       success: true,
       message: isNewUser ? 'Account registered successfully with Google.' : 'Logged in successfully with Google.',
       user: toPublicUser(user),
       token,
       isNewUser,
+      onboardingRoute,
     });
   } catch (error) {
     if (error.code === 'ACCOUNT_NOT_REGISTERED' || error.status === 404) {

@@ -7,8 +7,10 @@ export interface User {
   role: UserRole;
   avatarInitials: string;
   isVerified?: boolean;
+  isProfileComplete?: boolean;
   verificationStatus?: string;
   isGuest?: boolean;
+  patient?: any;
 }
 
 
@@ -20,6 +22,9 @@ export interface Hospital {
   id: string;
   name: string;
   address: string;
+  phone?: string;
+  city?: string;
+  state?: string;
   lat: number;
   lng: number;
   beds: number;

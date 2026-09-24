@@ -1,0 +1,144 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CareSetu Critical Demo — E2E Execution Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f8fafc; color: #0f172a; margin: 0; padding: 24px; }
+    .container { max-width: 1000px; margin: 0 auto; background: #ffffff; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); padding: 32px; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 24px; }
+    .title { font-size: 24px; font-weight: 800; color: #1e293b; margin: 0; }
+    .badge { font-size: 14px; font-weight: 700; padding: 6px 16px; border-radius: 9999px; text-transform: uppercase; }
+    .badge-pass { background: #dcfce7; color: #166534; }
+    .badge-fail { background: #fee2e2; color: #991b1b; }
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 24px; }
+    .card { background: #f1f5f9; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0; }
+    .card-label { font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; }
+    .card-value { font-size: 16px; font-weight: 700; color: #0f172a; margin-top: 4px; word-break: break-all; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0; font-size: 14px; }
+    th { background: #f8fafc; color: #475569; font-weight: 700; }
+    .status-pass { color: #166534; font-weight: 700; }
+    .status-fail { color: #991b1b; font-weight: 700; }
+    .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-top: 16px; }
+    .gallery img { width: 100%; border-radius: 8px; border: 1px solid #cbd5e1; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .section-title { font-size: 18px; font-weight: 700; color: #1e293b; margin-top: 32px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div>
+        <h1 class="title">CareSetu — Critical Demo E2E Report</h1>
+        <p style="margin: 4px 0 0; color: #64748b; font-size: 13px;">Patient SOS → Hospital Acceptance → Real HealthPack Verification</p>
+      </div>
+      <span class="badge badge-pass">PASS</span>
+    </div>
+
+    <div class="grid">
+      <div class="card"><div class="card-label">Case ID Captured</div><div class="card-value">CASE-20260923-B72161</div></div>
+      <div class="card"><div class="card-label">Total Duration</div><div class="card-value">34.55s</div></div>
+      <div class="card"><div class="card-label">Execution Environment</div><div class="card-value">Frontend: http://localhost:5173 | Backend: http://localhost:3000</div></div>
+      <div class="card"><div class="card-label">Browser & Engine</div><div class="card-value">Chromium Headless</div></div>
+    </div>
+
+    <h2 class="section-title">Step Execution Results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Step Name</th>
+          <th>Status</th>
+          <th>Duration</th>
+          <th>Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        
+          <tr>
+            <td style="font-weight: 600;">Patient Login</td>
+            <td class="status-pass">PASS</td>
+            <td>6451ms</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td style="font-weight: 600;">Emergency SOS Trigger</td>
+            <td class="status-pass">PASS</td>
+            <td>4059ms</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td style="font-weight: 600;">Case Creation & ID Capture</td>
+            <td class="status-pass">PASS</td>
+            <td>371ms</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td style="font-weight: 600;">Hospital Login (Second Browser Context)</td>
+            <td class="status-pass">PASS</td>
+            <td>4901ms</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td style="font-weight: 600;">Locate Same Case ID in Hospital Portal</td>
+            <td class="status-pass">PASS</td>
+            <td>3040ms</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td style="font-weight: 600;">Hospital Case Acceptance</td>
+            <td class="status-pass">PASS</td>
+            <td>5723ms</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td style="font-weight: 600;">Health Pack Access</td>
+            <td class="status-pass">PASS</td>
+            <td>572ms</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td style="font-weight: 600;">Health Data & Patient Name Validation</td>
+            <td class="status-pass">PASS</td>
+            <td>429ms</td>
+            <td>—</td>
+          </tr>
+      </tbody>
+    </table>
+
+    <h2 class="section-title">Evidence Screenshots</h2>
+    <div class="gallery">
+      
+        <div>
+          <img src="screenshots/01-patient-login.png" alt="Screenshot" />
+          <p style="font-size: 11px; text-align: center; color: #64748b; margin-top: 4px;">01-patient-login.png</p>
+        </div>
+        <div>
+          <img src="screenshots/02-sos-triggered.png" alt="Screenshot" />
+          <p style="font-size: 11px; text-align: center; color: #64748b; margin-top: 4px;">02-sos-triggered.png</p>
+        </div>
+        <div>
+          <img src="screenshots/03-case-created.png" alt="Screenshot" />
+          <p style="font-size: 11px; text-align: center; color: #64748b; margin-top: 4px;">03-case-created.png</p>
+        </div>
+        <div>
+          <img src="screenshots/04-hospital-case-found.png" alt="Screenshot" />
+          <p style="font-size: 11px; text-align: center; color: #64748b; margin-top: 4px;">04-hospital-case-found.png</p>
+        </div>
+        <div>
+          <img src="screenshots/05-case-accepted.png" alt="Screenshot" />
+          <p style="font-size: 11px; text-align: center; color: #64748b; margin-top: 4px;">05-case-accepted.png</p>
+        </div>
+        <div>
+          <img src="screenshots/06-healthpack-opened.png" alt="Screenshot" />
+          <p style="font-size: 11px; text-align: center; color: #64748b; margin-top: 4px;">06-healthpack-opened.png</p>
+        </div>
+        <div>
+          <img src="screenshots/07-healthpack-validated.png" alt="Screenshot" />
+          <p style="font-size: 11px; text-align: center; color: #64748b; margin-top: 4px;">07-healthpack-validated.png</p>
+        </div>
+    </div>
+  </div>
+</body>
+</html>
+      

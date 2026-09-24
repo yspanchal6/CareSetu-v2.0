@@ -38,7 +38,9 @@ class EmergencyRepository {
           h.name,
           h.address,
           h.phone,
+          h.city,
           h.capabilities,
+          h."isVerified",
           h."emergencyAvailable",
           h."hasEmergencyDepartment",
           h."hasICU",
@@ -58,7 +60,8 @@ class EmergencyRepository {
         FROM hospitals h
         JOIN users u ON h."userId" = u.id
         WHERE h."emergencyAvailable" = true
-          AND u.status != 'BLOCKED'
+          AND h."isVerified" = true
+          AND u.status = 'ACTIVE'
           AND h.location IS NOT NULL
           AND (h.location->>'latitude') IS NOT NULL
           AND (h.location->>'longitude') IS NOT NULL
@@ -66,7 +69,7 @@ class EmergencyRepository {
       WHERE candidates."distanceMeters" <= ${radiusMeters}
       ORDER BY candidates."distanceMeters" ASC,
                CASE WHEN candidates."locationAccuracy" = 'city_center' THEN 1 ELSE 0 END ASC
-      LIMIT 10
+      LIMIT 20
     `;
   }
 

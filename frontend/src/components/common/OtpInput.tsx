@@ -90,7 +90,7 @@ export const OtpInput = ({
   }, [status]);
 
   const getBoxStyles = () => {
-    const base = "w-12 h-14 text-center text-2xl font-bold border-2 rounded-lg transition-all duration-300 outline-none motion-reduce:transition-none";
+    const base = "w-9 sm:w-12 h-11 sm:h-14 text-lg sm:text-2xl font-bold border-2 rounded-lg transition-all duration-300 outline-none motion-reduce:transition-none";
     if (status === 'success') {
       return `${base} border-emerald-500 bg-emerald-50/50 text-emerald-700 shadow-sm shadow-emerald-100 scale-[1.02]`;
     }
@@ -106,7 +106,7 @@ export const OtpInput = ({
   return (
     <div className="flex flex-col items-center gap-3 my-4">
       <div 
-        className={`flex gap-3 justify-center ${status === 'error' || isShake ? 'animate-shake' : ''}`}
+        className={`flex gap-1.5 sm:gap-3 justify-center ${status === 'error' || isShake ? 'animate-shake' : ''}`}
         role="group"
         aria-label="OTP digit inputs"
       >

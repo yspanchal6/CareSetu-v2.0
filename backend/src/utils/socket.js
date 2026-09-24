@@ -46,7 +46,15 @@ const initSocket = (server) => {
       const jwt = require('jsonwebtoken');
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
       socket.userId = decoded.userId || decoded.id;
-      socket.role = decoded.role;
+      const prisma = require('../config/prisma');
+      const dbUser = await prisma.user.findUnique({
+        where: { id: socket.userId },
+        select: { role: true, status: true },
+      });
+      if (!dbUser || dbUser.status !== 'ACTIVE') {
+        return next(new Error('Invalid user session'));
+      }
+      socket.role = decoded.isGuest || decoded.role === 'GUEST' ? 'GUEST' : dbUser.role;
 
       const { isUserBlocked } = require('../services/admin-blocklist.service');
       const blockCheck = await isUserBlocked(socket.userId);

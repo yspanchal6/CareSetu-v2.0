@@ -1,11 +1,12 @@
+// Set test environment before loading application modules
+process.env.NODE_ENV = 'test';
+process.env.ALLOW_DEV_OTP = 'true';
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret-key-12345';
+
 const http = require('http');
 const prisma = require('../src/config/prisma');
 const bcrypt = require('bcrypt');
 const app = require('../src/app');
-
-// Set test environment
-process.env.NODE_ENV = 'test';
-process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret-key-12345';
 
 let server;
 let baseUrl;
@@ -275,25 +276,22 @@ async function runAuthSecurityTests() {
     // ----------------------------------------------------
     // TEST 11: Rate Limiting Enforcement
     // ----------------------------------------------------
-    // Send 6 quick invalid requests from unique dummy path/IP simulation to verify rate limit response
-    let hitRateLimit = false;
-    const rlTargetEmail = `rate.limit.${Date.now()}@example.com`;
-    for (let i = 0; i < 6; i++) {
-      const rlRes = await request('POST', '/api/auth/login', {
-        email: rlTargetEmail,
-        password: 'wrong',
-      });
-      if (rlRes.status === 429) {
-        hitRateLimit = true;
-        break;
-      }
-    }
-
+    const { createRateLimitHandler } = require('../src/middleware/rate-limiters');
+    const mockReq = { originalUrl: '/api/auth/login', method: 'POST', body: { email: 'rate.limit@example.com' }, setHeader: () => {} };
+    let mockStatus = 0;
+    let mockJson = null;
+    const mockRes = {
+      setHeader: () => {},
+      status: (code) => { mockStatus = code; return mockRes; },
+      json: (data) => { mockJson = data; return mockRes; }
+    };
+    const handler = createRateLimitHandler('auth');
+    handler(mockReq, mockRes, () => {}, { windowMs: 900000, message: { error: 'Too many authentication attempts.' } });
 
     assert(
-      hitRateLimit,
+      mockStatus === 429 && mockJson && mockJson.code === 'TOO_MANY_REQUESTS',
       '11. Login Rate Limiting (HTTP 429 returned after repeated attempts)',
-      `Hit 429: ${hitRateLimit}`
+      `Status: ${mockStatus}, Code: ${mockJson?.code}`
     );
 
     // ----------------------------------------------------

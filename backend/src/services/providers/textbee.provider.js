@@ -35,7 +35,7 @@ class TextBeeProvider {
    */
   isDevOtpModeAllowed() {
     const isProd = process.env.NODE_ENV === 'production';
-    const isDevFlag = process.env.DEV_OTP_MODE === 'true' || process.env.DEV_OTP_MODE === '1';
+    const isDevFlag = process.env.DEV_OTP_MODE === 'true' || process.env.DEV_OTP_MODE === '1' || process.env.NODE_ENV === 'test';
 
     if (isProd && isDevFlag) {
       console.error('[SECURITY_ALERT] DEV_OTP_MODE=true is enabled in production! Disabling dev fallback for security compliance.');

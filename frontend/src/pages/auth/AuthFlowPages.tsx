@@ -24,7 +24,7 @@ export function RoleSelectionPage() {
       <h2 className="text-2xl font-extrabold text-navy text-center">Choose your CareSetu profile</h2>
       <p className="text-sm text-text-secondary text-center mt-1.5 mb-6">Choose one to begin tailored onboarding</p>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {roles.map((r) => (
           <button
             key={r.role}

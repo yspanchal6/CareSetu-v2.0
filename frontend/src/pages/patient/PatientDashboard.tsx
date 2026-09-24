@@ -9,6 +9,9 @@ import { EmptyState } from "../../components/common/States";
 import { Inbox } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { RoleStatusBanner } from "../../components/common/RoleStatusBanner";
+import { isPatientProfileComplete } from "../../utils/profileHelpers";
+
 const severityTone = { Critical: "critical", CRITICAL: "critical", Urgent: "urgent", HIGH: "urgent", Stable: "stable", LOW: "stable" } as const;
 
 export default function PatientDashboard() {
@@ -19,25 +22,40 @@ export default function PatientDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!user || user.role?.toUpperCase() !== "PATIENT") return;
+    let active = true;
+    let fetching = false;
+
     const load = async () => {
+      if (!active || fetching) return;
+      fetching = true;
       try {
         const res = await emergencyApi.getMyCases();
-        setCases(res.cases || []);
+        if (active) setCases(res.cases || []);
       } catch (err) {
-        console.error(err);
+        console.error("[PatientDashboard]", err);
       } finally {
-        setLoading(false);
+        fetching = false;
+        if (active) setLoading(false);
       }
     };
+
     load();
-    const iv = setInterval(load, 10000);
-    return () => clearInterval(iv);
-  }, []);
+    const iv = setInterval(load, 30000);
+    return () => {
+      active = false;
+      clearInterval(iv);
+    };
+  }, [user]);
 
   const recentCase = cases.length > 0 ? cases[0] : null;
 
   return (
     <div className="flex flex-col gap-6 pb-6">
+      {!isPatientProfileComplete(user) && (
+        <RoleStatusBanner role="patient" status="Incomplete" />
+      )}
+
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-text-secondary">Good morning,</p>

@@ -40,4 +40,4 @@ router.post("/verify-reset-phone-otp", otpRateLimiter, verifyResetPhoneOtp);
 router.post("/cancel-forgot-password", cancelForgotPassword);
 router.post("/reset-password", otpRateLimiter, resetPassword);
 
-module.exports = router;
+module.exports = router;

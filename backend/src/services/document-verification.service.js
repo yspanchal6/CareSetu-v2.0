@@ -99,11 +99,20 @@ async function getVerificationStatus(userId) {
 
   const phone = user.patient?.phone || user.hospital?.phone || null;
 
+  const verificationStatus = user.role === 'HOSPITAL' && user.hospital
+    ? user.hospital.verificationStatus
+    : (user.isVerified ? 'APPROVED' : 'PENDING');
+  const hospitalStatus = user.role === 'HOSPITAL' && user.hospital
+    ? user.hospital.status
+    : (user.isVerified ? 'ACTIVE' : 'INACTIVE');
+
   return {
     success: true,
     user: sanitizeUserResponse(user),
     role,
-    isVerified: user.isVerified,
+    isVerified: user.role === 'HOSPITAL' ? (verificationStatus === 'APPROVED' && hospitalStatus === 'ACTIVE') : Boolean(user.isVerified),
+    verificationStatus,
+    hospitalStatus,
     requiredDocuments: requiredDocSpecs,
     uploadedDocuments: allDocs.map(doc => ({
       id: doc.id,

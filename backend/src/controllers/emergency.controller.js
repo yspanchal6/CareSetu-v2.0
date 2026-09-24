@@ -111,12 +111,23 @@ exports.createSOS = async (req, res, next) => {
     }
     const { symptoms, latitude, longitude, emergencyType, severity, idempotencyKey, source } = sosSchema.parse(payload);
 
-    const userId = req.user?.userId || req.user?.id || req.user?.sub;
+    const userId = req.user?.id || req.user?.userId || req.user?.sub;
     if (!userId) {
       return res.status(401).json({ error: 'User authentication is required.' });
     }
 
     void detectRepeatedSOS(userId);
+
+    // Fetch patient profile from Prisma model using req.user.id to retrieve blood_group and medical_conditions
+    const patientProfile = await prisma.patient.findUnique({
+      where: { userId },
+      select: { bloodGroup: true, medicalConditions: true, conditions: true },
+    }).catch(() => null);
+
+    const bloodGroup = patientProfile?.bloodGroup ? String(patientProfile.bloodGroup).trim() : null;
+    const knownConditions = (patientProfile?.medicalConditions ? String(patientProfile.medicalConditions).trim() : null) ||
+                            (patientProfile?.conditions ? String(patientProfile.conditions).trim() : null) ||
+                            null;
 
     const result = await emergencyService.createEmergencyCase({
       userId,
@@ -126,7 +137,13 @@ exports.createSOS = async (req, res, next) => {
       emergencyType,
       severity,
       idempotencyKey,
-      source
+      source,
+      patientMedicalHistory: {
+        bloodGroup,
+        knownConditions,
+        blood_group: bloodGroup || 'Not provided',
+        medical_conditions: knownConditions || 'Not provided',
+      },
     });
 
     res.status(201).json({
@@ -437,18 +454,26 @@ exports.acceptEmergency = async (req, res) => {
     const { caseId } = req.params;
     const userId = req.user.userId || req.user.id;
 
-    let hospitalId = req.user.hospitalId;
-    if (!hospitalId) {
-      const hospital = await prisma.hospital.findUnique({
-        where: { userId },
-        select: { id: true },
-      });
-      hospitalId = hospital?.id;
-    }
+    // Fetch user and linked hospital profile
+    const hospital = await prisma.hospital.findFirst({
+      where: { userId },
+      include: { user: true },
+    });
 
-    if (!hospitalId) {
+    if (!hospital) {
       return res.status(403).json({ error: 'Hospital profile not found' });
     }
+
+    // Role & Verification Status check: Hospital must be ACTIVE & APPROVED by Admin
+    if (hospital.user.status === 'BLOCKED') {
+      return res.status(403).json({ error: 'Hospital account is suspended or blocked.' });
+    }
+
+    if (!hospital.isVerified || hospital.user.status !== 'ACTIVE') {
+      return res.status(403).json({ error: 'Hospital is not verified or active. Verification by Admin is required before accepting emergencies.' });
+    }
+
+    const hospitalId = hospital.id;
 
     const emergencyCase = await prisma.emergencyCase.findFirst({
       where: {
@@ -460,7 +485,11 @@ exports.acceptEmergency = async (req, res) => {
     });
 
     if (!emergencyCase) {
-      return res.status(404).json({ error: 'Case not found' });
+      return res.status(404).json({ error: 'Emergency case not found.' });
+    }
+
+    if (emergencyCase.hospitalId && emergencyCase.hospitalId !== hospitalId) {
+      return res.status(409).json({ error: 'This emergency case has already been accepted by another hospital.' });
     }
 
     const hospitalRequest = await prisma.hospitalRequest.findFirst({
@@ -471,23 +500,16 @@ exports.acceptEmergency = async (req, res) => {
     });
 
     if (!hospitalRequest) {
-      return res.status(403).json({ error: 'No request assigned to this hospital' });
+      return res.status(403).json({ error: 'No request assigned to this hospital for this emergency case.' });
     }
 
     if (hospitalRequest.status === 'ACCEPTED') {
-      return res.json({ success: true, message: 'Already accepted' });
+      return res.json({ success: true, message: 'Already accepted by your hospital.' });
     }
 
-    const alreadyAccepted = await prisma.hospitalRequest.findFirst({
-      where: {
-        emergencyCaseId: emergencyCase.id,
-        status: 'ACCEPTED',
-      },
-    });
-
-    if (alreadyAccepted || hospitalRequest.status !== 'PENDING') {
+    if (hospitalRequest.status !== 'PENDING') {
       return res.status(409).json({
-        error: 'Case is no longer available to accept.',
+        error: 'This emergency case has already been accepted or is no longer available.',
       });
     }
 
@@ -502,9 +524,10 @@ exports.acceptEmergency = async (req, res) => {
       },
     });
 
-    await prisma.$transaction([
-      prisma.hospitalRequest.update({
-        where: { id: hospitalRequest.id },
+    // Atomic concurrency update: ensuring status is still PENDING at update time
+    const [updateReqResult] = await prisma.$transaction([
+      prisma.hospitalRequest.updateMany({
+        where: { id: hospitalRequest.id, status: 'PENDING' },
         data: { status: 'ACCEPTED', respondedAt: new Date() },
       }),
       prisma.hospitalRequest.updateMany({
@@ -519,8 +542,8 @@ exports.acceptEmergency = async (req, res) => {
           respondedAt: new Date(),
         },
       }),
-      prisma.emergencyCase.update({
-        where: { id: emergencyCase.id },
+      prisma.emergencyCase.updateMany({
+        where: { id: emergencyCase.id, hospitalId: null },
         data: {
           hospitalId,
           status: 'TRANSFER',
@@ -550,6 +573,12 @@ exports.acceptEmergency = async (req, res) => {
           ]
         : []),
     ]);
+
+    if (updateReqResult.count === 0) {
+      return res.status(409).json({
+        error: 'This emergency case has already been accepted or is no longer available.',
+      });
+    }
 
     // Automatically share the patient's HealthPack with the accepting hospital.
     // Reuses HealthPackService (ensures an ACTIVE pack exists; idempotent on retry).

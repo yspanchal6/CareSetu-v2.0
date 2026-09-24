@@ -79,6 +79,11 @@ function sanitizeUserResponse(user) {
     ...safeUser
   } = user;
 
+  const isPatientComplete = Boolean(
+    safeUser.isVerified ||
+    (safeUser.patient && safeUser.patient.name && String(safeUser.patient.name).trim().length >= 2 && Number(safeUser.patient.age) > 0 && safeUser.patient.gender && String(safeUser.patient.gender).toUpperCase() !== 'UNSPECIFIED')
+  );
+
   return {
     id: safeUser.id,
     email: safeUser.email ? normalizeEmail(safeUser.email) : undefined,
@@ -86,10 +91,12 @@ function sanitizeUserResponse(user) {
     name: safeUser.name || safeUser.patient?.name || safeUser.hospital?.name || undefined,
     status: safeUser.status,
     isVerified: safeUser.isVerified,
+    isProfileComplete: safeUser.role === 'PATIENT' ? isPatientComplete : safeUser.isVerified,
     lastLoginAt: safeUser.lastLoginAt,
     createdAt: safeUser.createdAt,
     hospitalId: safeUser.hospital?.id || undefined,
     patientId: safeUser.patient?.id || undefined,
+    patient: safeUser.patient ? safeUser.patient : undefined,
     locationSource: safeUser.hospital?.location?.source || undefined,
     locationAccuracy: safeUser.hospital?.location?.accuracy || undefined,
   };

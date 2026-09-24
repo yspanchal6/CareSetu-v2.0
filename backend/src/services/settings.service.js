@@ -1,5 +1,6 @@
 const prisma = require('../config/prisma');
 const bcrypt = require('bcrypt');
+const healthPackService = require('./health-pack.service');
 
 /**
  * Get profile details for authenticated user based on role.
@@ -137,6 +138,13 @@ async function updateProfile(userId, updateData) {
         where: { id: user.patient.id },
         data: patientFields,
       });
+    }
+
+    // Keep the patient's active encrypted HealthPack in sync with profile changes.
+    try {
+      await healthPackService.refreshHealthPackFromPatient(user.patient.id);
+    } catch (hpErr) {
+      console.warn('[Settings] HealthPack profile sync warning:', hpErr.message);
     }
   } else if (user.role === 'HOSPITAL') {
     const hospitalFields = {};
