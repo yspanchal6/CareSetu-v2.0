@@ -13,7 +13,8 @@ void flushQueuedSOS(emergencySyncClient); // startup trigger (concurrency-guarde
 // Offline fallback service worker — production builds only (dev reloads constantly).
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").catch(() => {
+    const swPath = `${import.meta.env.BASE_URL}sw.js`;
+    navigator.serviceWorker.register(swPath).catch(() => {
       console.warn("[SW] Offline fallback could not be registered.");
     });
   });

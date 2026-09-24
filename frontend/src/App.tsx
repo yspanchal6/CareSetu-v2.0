@@ -78,7 +78,7 @@ export default function App() {
     <AuthProvider>
       <ToastProvider>
         <SocketProvider>
-          <BrowserRouter>
+          <BrowserRouter basename={import.meta.env.BASE_URL}>
           <Routes>
             {/* Public site */}
             <Route element={<PublicLayout />}>
