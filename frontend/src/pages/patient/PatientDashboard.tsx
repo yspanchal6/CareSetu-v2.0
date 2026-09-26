@@ -149,7 +149,7 @@ export default function PatientDashboard() {
         </div>
         <div className="flex flex-col gap-3">
           {nearby.map((h) => (
-            <Link key={h.id} to={`/patient/hospitals/${h.id}`}>
+            <Link key={h.id} to={`/patient/hospitals/${h.id}`} state={{ hospital: h }}>
               <Card className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-paleblue flex items-center justify-center">

@@ -430,7 +430,7 @@ export default function PatientHospitalsPage() {
 
           <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {filtered.map((h) => (
-              <Link key={h.id} to={`/patient/hospitals/${h.id}`}>
+              <Link key={h.id} to={`/patient/hospitals/${h.id}`} state={{ hospital: h }}>
                 <HospitalCard hospital={h} distanceKm={h.distanceKm} />
               </Link>
             ))}

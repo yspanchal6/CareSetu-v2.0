@@ -398,6 +398,8 @@ export const hospitalApi = {
     const radiusParam = radius ? `&radius=${radius}` : '';
     return request<{ success: true; hospitals: NearbyHospital[]; count?: number; searchRadiusKm?: number }>(`/hospitals/nearby?lat=${latitude}&lng=${longitude}${radiusParam}`);
   },
+  getById: (id: string) =>
+    request<{ success: true; hospital: any }>(`/hospitals/${encodeURIComponent(id)}`),
   getEmergencyCases: () =>
     request<{ success: true; cases: any[] }>(`/hospitals/cases`),
   acceptCase: (caseId: string) =>

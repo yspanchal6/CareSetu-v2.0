@@ -2,6 +2,7 @@ const express = require('express');
 const { auth, authorize, denyGuest } = require('../middleware/auth.middleware');
 const {
   getAllHospitals,
+  getHospitalById,
   findNearbyHospitals,
   acceptCase,
   getHospitalCases,
@@ -25,15 +26,15 @@ const {
 
 const router = express.Router();
 
-// Get all hospitals (Public / Patient view)
+// Public / Patient view endpoints
 router.get('/', getAllHospitals);
+router.get('/nearest', findNearbyHospitals);
+router.get('/nearby', findNearbyHospitals);
+router.get('/details/:id', getHospitalById);
+router.get('/:id', getHospitalById);
 
 // Apply auth & denyGuest to all operational hospital routes
 router.use(auth, denyGuest);
-
-// Get nearest hospitals
-router.get('/nearest', findNearbyHospitals);
-router.get('/nearby', findNearbyHospitals);
 
 // Hospital operational routes (Requires HOSPITAL role)
 router.get('/cases', auth, authorize('HOSPITAL'), getHospitalCases);
