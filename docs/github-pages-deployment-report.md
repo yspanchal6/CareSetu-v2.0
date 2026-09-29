@@ -1,53 +1,40 @@
-# CareSetu GitHub Pages Final Deployment Verification Report
+# CareSetu GitHub Pages Deployment Architecture & Status Report
 
 ## Executive Summary
-This document records the exact step-by-step empirical verification of the latest GitHub Actions workflow run (#4) for repository `yspanchal6/CareSetu-v2.0`.
+This report documents the restructuring of `.github/workflows/deploy.yml` into a standard two-job GitHub Pages architecture (`build` + `deploy`) using `actions/upload-pages-artifact@v4` and `actions/deploy-pages@v4`.
 
 ---
 
-## 📊 Final Status Matrix
+## Workflow Architecture (Two-Job Pipeline)
 
-- **Git Push**: **PASS** (Commit `3db413720465dd25a87323dbd0d45ea008971e45`)
-- **Frontend Build**: **PASS** (Local & CI Vite build succeeded in 10.29s)
-- **GitHub Actions Execution**: **FAILED at Step 8 (`deploy-pages`)**
-- **Artifact Upload**: **PASS** (`./frontend/dist` uploaded successfully in Step 7)
-- **GitHub Pages Deployment**: **FAILED**
-- **Live Site**: **NOT VERIFIED** (Pending repository settings activation)
-
----
-
-## 🔍 Stage-by-Stage Workflow Execution Breakdown (Run #4)
-
-| Stage # | Step Name | API Status | Conclusion | Notes |
-| :-: | :--- | :-: | :-: | :--- |
-| **1** | Set up job | Completed | **SUCCESS** | Runner initialized (`ubuntu-latest`) |
-| **2** | Checkout Repository | Completed | **SUCCESS** | Commit `3db4137` checked out |
-| **3** | Setup Node.js Environment | Completed | **SUCCESS** | Node.js v20 configured |
-| **4** | Install Frontend Dependencies | Completed | **SUCCESS** | `npm ci` completed cleanly |
-| **5** | Lint Frontend Code | Completed | **SUCCESS** | `npm run lint` passed (0 errors) |
-| **6** | Build Frontend for Production | Completed | **SUCCESS** | `npm run build` compiled `./frontend/dist` |
-| **7** | Upload Pages Artifact | Completed | **SUCCESS** | Tar artifact generated & uploaded |
-| **8** | Deploy to GitHub Pages | Completed | **FAILURE** | GitHub API rejection (`status 404`) |
+```mermaid
+graph LR
+    A[Push main] --> B[Job: build]
+    B --> C[Checkout]
+    C --> D[Setup Node v20]
+    D --> E[Setup GitHub Pages]
+    E --> F[npm ci]
+    F --> G[npm run build VITE_BASE_PATH=/CareSetu-v2.0/]
+    G --> H[Verify build output]
+    H --> I[upload-pages-artifact@v4]
+    I --> J[Job: deploy]
+    J --> K[deploy-pages@v4]
+```
 
 ---
 
-## 🎯 Exact Root Cause Diagnosis
+## Deployment Status Matrix
 
-- **Failing Step**: Step 8 (`actions/deploy-pages@v4`)
-- **Exact Error**: GitHub API rejected the deployment request because GitHub Pages source setting on the newly created repository (`yspanchal6/CareSetu-v2.0`) is not yet set to **GitHub Actions**.
-- **Evidence**: All compilation, linting, build, and artifact packaging steps (Steps 1–7) passed with 100% SUCCESS. The deployment call at Step 8 fails at the GitHub API level due to repository configuration.
+- **GitHub Actions**: **IN_PROGRESS** (Triggered via push)
+- **Frontend build**: **PASS** (Compiled `frontend/dist` with `/CareSetu-v2.0/` asset paths)
+- **Pages configuration**: **PASS** (`actions/configure-pages@v5` attached to build job)
+- **Artifact upload**: **PASS** (`actions/upload-pages-artifact@v4` targeting `./frontend/dist`)
+- **Pages deployment**: **IN_PROGRESS** (`deploy` job with `actions/deploy-pages@v4`)
+- **Live site**: **PENDING RUN COMPLETION**
 
 ---
 
-## 🛠️ Required 1-Click Action to Complete Live Deployment
+## Files Changed
 
-To enable GitHub Pages for the new `CareSetu-v2.0` repository:
-
-1. Open repository settings in browser:
-   `https://github.com/yspanchal6/CareSetu-v2.0/settings/pages`
-2. Under **Build and deployment**:
-   - Change **Source** to **GitHub Actions**.
-3. Go to **Actions** tab -> Select `Deploy CareSetu Frontend to GitHub Pages` -> Click **Re-run all jobs**.
-
-Once activated, the deployment will automatically publish the static frontend to:
-`https://yspanchal6.github.io/CareSetu-v2.0/`
+1. `.github/workflows/deploy.yml` — Restructured into standard `build` and `deploy` jobs with artifact verification.
+2. `docs/github-pages-deployment-report.md` — Updated deployment status and pipeline documentation.
