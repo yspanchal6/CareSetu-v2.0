@@ -92,8 +92,58 @@ async function createToken(user) {
   );
 }
 
-function toPublicUser(user) {
-  return sanitizeUserResponse(user);
+async function toPublicUser(user) {
+  const publicUser = sanitizeUserResponse(user);
+  if (user && user.role === 'HOSPITAL') {
+    let hospitalId = user.hospital?.id;
+    if (!hospitalId) {
+      try {
+        const h = await prisma.hospital.findUnique({
+          where: { userId: user.id },
+          select: { id: true },
+        });
+        hospitalId = h?.id;
+      } catch (e) {}
+    }
+
+    if (hospitalId) {
+      try {
+        const secStatus = await prisma.hospitalSecurityStatus.findUnique({
+          where: { hospitalId },
+        });
+        const curr = secStatus?.currentViolationCount || 0;
+        const hist = secStatus?.historicalViolationCount || 0;
+        const epoch = secStatus?.securityEpoch || 1;
+        const stat = secStatus?.status || (curr >= 3 ? 'TEMPORARILY_BLOCKED' : curr > 0 ? 'WARNING' : 'ACTIVE');
+
+        publicUser.hospitalSecurityStatus = stat;
+        publicUser.currentViolationCount = curr;
+        publicUser.securityEpoch = epoch;
+        publicUser.security = {
+          status: stat,
+          currentViolationCount: curr,
+          historicalViolationCount: hist,
+          maxAttempts: 3,
+          remainingAttempts: Math.max(3 - curr, 0),
+          securityEpoch: epoch,
+          blockedAt: secStatus?.blockedAt || null,
+          blockReason: secStatus?.blockReason || null,
+        };
+      } catch (e) {
+        publicUser.security = {
+          status: 'ACTIVE',
+          currentViolationCount: 0,
+          historicalViolationCount: 0,
+          maxAttempts: 3,
+          remainingAttempts: 3,
+          securityEpoch: 1,
+          blockedAt: null,
+          blockReason: null,
+        };
+      }
+    }
+  }
+  return publicUser;
 }
 
 exports.register = async (req, res, next) => {
@@ -247,7 +297,7 @@ exports.register = async (req, res, next) => {
 
     res.status(201).json({
       success: true,
-      user: toPublicUser(user),
+      user: await toPublicUser(user),
       token: await createToken(user),
       expiresAt: otpResult.expiresAt,
       channels: otpResult.channels,
@@ -304,7 +354,7 @@ exports.login = async (req, res, next) => {
 
     res.json({
       success: true,
-      user: toPublicUser(user),
+      user: await toPublicUser(user),
       token: await createToken(user),
     });
   } catch (error) {
@@ -339,7 +389,7 @@ exports.getMe = async (req, res, next) => {
     }
     res.json({
       success: true,
-      user: toPublicUser(user),
+      user: await toPublicUser(user),
     });
   } catch (error) {
     next(error);
@@ -450,7 +500,7 @@ exports.googleAuth = async (req, res, next) => {
     res.json({
       success: true,
       message: isNewUser ? 'Account registered successfully with Google.' : 'Logged in successfully with Google.',
-      user: toPublicUser(user),
+      user: await toPublicUser(user),
       token,
       isNewUser,
       onboardingRoute,
@@ -582,11 +632,13 @@ exports.verifyOtp = async (req, res, next) => {
         include: userWithProfile
       });
 
-      if (user) {
-        token = await createToken(user);
-        publicUser = toPublicUser(user);
-        await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+      if (!user) {
+        return res.status(404).json({ error: 'No account exists for this email address or phone number. Please register first.' });
       }
+
+      token = await createToken(user);
+      publicUser = toPublicUser(user);
+      await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
     } else if (['PASSWORD_RESET_EMAIL', 'PASSWORD_RESET_PHONE', 'PASSWORD_RESET'].includes(purpose)) {
       const user = await prisma.user.findFirst({
         where: {

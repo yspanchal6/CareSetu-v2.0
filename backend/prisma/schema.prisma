@@ -187,6 +187,14 @@ enum AuditAction {
   DATA_ACCESS
   DATA_EXPORT
   SECURITY_EVENT
+
+  CAPTURE_VIOLATION
+  CAPTURE_WARNING_ISSUED
+  HOSPITAL_TEMPORARILY_BLOCKED
+  HOSPITAL_APPEAL_SUBMITTED
+  HOSPITAL_BLOCK_REVIEWED
+  HOSPITAL_UNLOCKED
+  HOSPITAL_SESSION_REVOKED
 }
 
 enum LocationSource {
@@ -237,6 +245,7 @@ model User {
   restrictionsCreated AccountRestriction[] @relation("RestrictionsCreated")
   restrictionsRevoked AccountRestriction[] @relation("RestrictionsRevoked")
   pendingCredentialChanges PendingCredentialChange[]
+  deletionRequests AccountDeletionRequest[]
 
   @@index([email])
   @@index([role])
@@ -355,6 +364,11 @@ model Hospital {
 
   emergencyCases  EmergencyCase[]
   hospitalRequests HospitalRequest[]
+  matches          HospitalMatch[]
+  securityStatus   HospitalSecurityStatus?
+  captureViolations CaptureViolation[]
+  securityAppeals  HospitalSecurityAppeal[]
+  viewSessions     SecureViewSession[]
 
   @@index([userId])
   @@index([emergencyAvailable])
@@ -965,5 +979,295 @@ model PendingCredentialChange {
 
   @@map("pending_credential_changes")
 }
+
+// ============================================================
+// ACCOUNT DELETION & TERMINATION REQUESTS
+// ============================================================
+
+enum AccountDeletionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  TERMINATED
+}
+
+model AccountDeletionRequest {
+  id                   String                @id @default(uuid())
+  userId               String?
+  user                 User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  role                 Role
+  nameSnapshot         String
+  usernameSnapshot     String
+  emailSnapshot        String
+  reason               String
+  status               AccountDeletionStatus @default(PENDING)
+
+  adminReason          String?
+  reviewedBy           String?
+  requestedAt          DateTime              @default(now())
+  reviewedAt           DateTime?
+  terminatedAt         DateTime?
+
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  @@index([userId])
+  @@index([role])
+  @@index([status])
+  @@index([createdAt])
+
+  @@map("account_deletion_requests")
+}
+
+// ============================================================
+// GOVERNMENT HEALTH DATA FOUNDATION (V2.0 STEP 1)
+// ============================================================
+
+enum HealthDataSource {
+  DATA_GOV_IN
+  PM_JAY
+  API_SETU
+  EXTERNAL_SOURCE
+}
+
+enum GovDataSyncStatus {
+  NOT_CONFIGURED
+  READY
+  SYNCING
+  SUCCESS
+  FAILED
+}
+
+model GovernmentHealthRecord {
+  id             String           @id @default(uuid())
+  source         HealthDataSource @default(DATA_GOV_IN)
+  sourceDataset  String
+  sourceRecordId String
+  hospitalName   String
+  state          String
+  district       String?
+  address        String?
+  pincode        String?
+  hospitalType   String?
+  latitude       Float?
+  longitude      Float?
+  bedCount       Int?
+  category       String?
+  admissionData  Json?
+  rawData        Json?
+  licenseInfo    String?          @default("Government Open Data License - India")
+  sourceUrl      String?
+  lastSyncedAt   DateTime         @default(now())
+
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  matches        HospitalMatch[]
+
+  @@unique([source, sourceRecordId])
+  @@index([source])
+  @@index([state])
+  @@index([district])
+  @@index([hospitalName])
+  @@index([pincode])
+
+  @@map("government_health_records")
+}
+
+model GovernmentSyncLog {
+  id            String            @id @default(uuid())
+  source        HealthDataSource
+  status        GovDataSyncStatus @default(READY)
+  sourceDataset String
+  recordsCount  Int               @default(0)
+  errorMessage  String?
+  lastSyncAt    DateTime          @default(now())
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@unique([source, sourceDataset])
+  @@index([source])
+  @@index([status])
+
+  @@map("government_sync_logs")
+}
+
+// ============================================================
+// HOSPITAL MATCHING & ENTITY LINKING (V2.0 STEP 3)
+// ============================================================
+
+enum MatchStatus {
+  PENDING_REVIEW
+  MATCHED
+  REJECTED
+  UNMATCHED
+}
+
+enum MatchConfidenceLevel {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+model HospitalMatch {
+  id                   String               @id @default(uuid())
+  careSetuHospitalId   String
+  governmentRecordId   String
+  status               MatchStatus          @default(PENDING_REVIEW)
+  confidenceLevel      MatchConfidenceLevel @default(MEDIUM)
+  confidenceScore      Float?
+  matchingMethod       String               @default("DETERMINISTIC_MULTI_SIGNAL")
+  matchReasons         Json
+  conflictReasons      Json
+  evidenceSnapshot     Json?
+  distanceKm           Float?
+
+  reviewedBy           String?
+  reviewedAt           DateTime?
+  rejectedBy           String?
+  rejectedAt           DateTime?
+  rejectionReason      String?
+  unmatchedBy          String?
+  unmatchedAt          DateTime?
+  unmatchReason        String?
+
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  careSetuHospital     Hospital             @relation(fields: [careSetuHospitalId], references: [id], onDelete: Cascade)
+  governmentRecord     GovernmentHealthRecord @relation(fields: [governmentRecordId], references: [id], onDelete: Cascade)
+
+  @@unique([careSetuHospitalId, governmentRecordId])
+  @@index([careSetuHospitalId])
+  @@index([governmentRecordId])
+  @@index([status])
+  @@index([confidenceLevel])
+  @@index([createdAt])
+
+  @@map("hospital_matches")
+}
+
+// ============================================================
+// HOSPITAL CAPTURE VIOLATION & SECURITY PROTECTION
+// ============================================================
+
+enum HospitalSecurityStatusType {
+  ACTIVE
+  WARNING
+  TEMPORARILY_BLOCKED
+  UNDER_REVIEW
+}
+
+enum CaptureViolationType {
+  SCREENSHOT_ATTEMPT
+  SCREEN_CAPTURE_DETECTED
+  SCREEN_RECORDING_DETECTED
+  SCREEN_MIRRORING_DETECTED
+  PROTECTED_CONTENT_CAPTURE
+}
+
+enum AppealStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  CLOSED
+}
+
+model HospitalSecurityStatus {
+  id                       String                     @id @default(uuid())
+  hospitalId               String                     @unique
+  hospital                 Hospital                   @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  status                   HospitalSecurityStatusType @default(ACTIVE)
+  violationCount           Int                        @default(0)
+  currentViolationCount    Int                        @default(0)
+  historicalViolationCount Int                        @default(0)
+  securityEpoch            Int                        @default(1)
+  blockedAt                DateTime?
+  blockedUntil             DateTime?
+  lastViolationAt          DateTime?
+  unblockedAt              DateTime?
+  unblockedBy              String?
+  blockReason              String?
+  createdAt                DateTime                   @default(now())
+  updatedAt                DateTime                   @updatedAt
+
+  @@index([hospitalId])
+  @@index([status])
+  @@map("hospital_security_statuses")
+}
+
+model CaptureViolation {
+  id                    String               @id @default(uuid())
+  hospitalId            String
+  hospital              Hospital             @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  hospitalUserId        String
+  patientId             String?
+  caseId                String?
+  documentId            String?
+  healthPackId          String?
+  secureViewerSessionId String?
+  securityEpoch         Int                  @default(1)
+  eventType             CaptureViolationType @default(SCREENSHOT_ATTEMPT)
+  platform              String               @default("WEB")
+  attemptNumber         Int
+  detectedAt            DateTime             @default(now())
+  severity              String               @default("HIGH")
+  status                String               @default("RECORDED")
+  metadata              Json?
+  createdAt             DateTime             @default(now())
+
+  @@index([hospitalId])
+  @@index([hospitalUserId])
+  @@index([caseId])
+  @@index([detectedAt])
+  @@map("capture_violations")
+}
+
+model HospitalSecurityAppeal {
+  id           String       @id @default(uuid())
+  hospitalId   String
+  hospital     Hospital     @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  submittedBy  String
+  reason       String
+  description  String
+  reviewReference String?
+  status       AppealStatus @default(PENDING)
+  adminNotes   String?
+  submittedAt  DateTime     @default(now())
+  reviewedAt   DateTime?
+  reviewedBy   String?
+  decision     String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([hospitalId])
+  @@index([status])
+  @@index([submittedAt])
+  @@map("hospital_security_appeals")
+}
+
+model SecureViewSession {
+  id            String    @id @default(uuid())
+  hospitalId    String
+  hospital      Hospital  @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  caseId        String
+  documentId    String?
+  healthPackId  String?
+  securityEpoch Int       @default(1)
+  status        String    @default("ACTIVE")
+  startedAt     DateTime  @default(now())
+  expiresAt     DateTime
+  revokedAt     DateTime?
+
+  @@index([hospitalId])
+  @@index([caseId])
+  @@index([securityEpoch])
+  @@map("secure_view_sessions")
+}
+
+
+
+
 
 

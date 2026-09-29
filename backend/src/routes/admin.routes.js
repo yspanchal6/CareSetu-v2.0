@@ -2,6 +2,7 @@ const express = require('express');
 const { auth, authorize, denyGuest } = require('../middleware/auth.middleware');
 const controller = require('../controllers/admin.controller');
 const blocklistController = require('../controllers/admin-blocklist.controller');
+const deletionController = require('../controllers/account-deletion.controller');
 
 const router = express.Router();
 
@@ -9,14 +10,21 @@ const router = express.Router();
 router.use(auth, denyGuest, authorize('ADMIN'));
 
 router.get('/dashboard/stats', controller.getDashboardStats);
+router.get('/analytics', controller.getAnalytics);
 router.get('/users', blocklistController.getUsers);
 router.get('/hospitals', blocklistController.getHospitals);
 router.get('/patients', blocklistController.getPatients);
 router.get('/emergencies', controller.getAllEmergencies);
 
 router.get('/hospitals/verification-requests', controller.getHospitalVerificationRequests);
+router.post('/hospitals/register', controller.registerHospital);
 router.post('/hospitals/:id/approve', controller.approveHospital);
 router.post('/hospitals/:id/reject', controller.rejectHospital);
+
+// Account Deletion Requests
+router.get('/account-deletion-requests', deletionController.getAdminDeletionRequests);
+router.post('/account-deletion-requests/:id/approve', deletionController.approveDeletionRequest);
+router.post('/account-deletion-requests/:id/reject', deletionController.rejectDeletionRequest);
 
 // Blocklist & Security Management
 router.post('/blocklist', blocklistController.blockAccount);

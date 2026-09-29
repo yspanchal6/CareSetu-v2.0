@@ -10,8 +10,10 @@ import { notifications } from "../../data/notifications";
 import { OfflineState } from "../../components/common/States";
 import { useAuth } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "../../i18n/I18nContext";
 import { settingsApi, emergencySyncClient } from "../../services/api";
 import { CredentialUpdateModal } from "../../components/common/CredentialUpdateModal";
+import { DeleteAccountSection } from "../../components/common/DeleteAccountSection";
 import {
   subscribeOfflineQueue,
   flushQueuedSOS,
@@ -21,11 +23,12 @@ import {
 export function PatientProfilePage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const links = [
-    { icon: FileText, label: "Medical Information", to: "/patient/medical-information" },
-    { icon: FileStack, label: "Documents", to: "/patient/health-pack" },
-    { icon: Bell, label: "Notifications", to: "/patient/notifications" },
-    { icon: SettingsIcon, label: "Settings", to: "/patient/settings" },
+    { icon: FileText, label: t("nav.medicalInformation"), to: "/patient/medical-information" },
+    { icon: FileStack, label: t("nav.healthPack"), to: "/patient/health-pack" },
+    { icon: Bell, label: t("nav.notifications"), to: "/patient/notifications" },
+    { icon: SettingsIcon, label: t("nav.settings"), to: "/patient/settings" },
   ];
   return (
     <div className="max-w-lg mx-auto flex flex-col gap-5 pb-6">
@@ -38,7 +41,7 @@ export function PatientProfilePage() {
       </Card>
       <div className="flex flex-col gap-2.5">
         {links.map((l) => (
-          <button key={l.label} onClick={() => navigate(l.to)} className="text-left">
+          <button key={l.to} onClick={() => navigate(l.to)} className="text-left">
             <Card className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-lightblue flex items-center justify-center">
@@ -60,27 +63,28 @@ export function PatientProfilePage() {
           navigate("/login");
         }}
       >
-        Log out
+        {t("auth.logout")}
       </Button>
     </div>
   );
 }
 
 export function MedicalInformationPage() {
+  const { t } = useTranslation();
   const patient = patients[2];
   return (
     <div className="max-w-lg mx-auto flex flex-col gap-4 pb-6">
       <Card>
-        <p className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-3">Personal information</p>
+        <p className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-3">{t("profile.personalInformation")}</p>
         <div className="grid grid-cols-2 gap-3">
-          <Input label="Age" defaultValue={patient.age} readOnly />
-          <Input label="Blood group" defaultValue={patient.bloodGroup} readOnly />
+          <Input label={t("profile.age")} defaultValue={patient.age} readOnly />
+          <Input label={t("profile.bloodGroup")} defaultValue={patient.bloodGroup} readOnly />
         </div>
       </Card>
       <Card>
         <div className="flex items-center gap-2 mb-3">
           <AlertTriangle className="w-4.5 h-4.5 text-emergency" />
-          <p className="font-semibold text-navy text-sm">Allergies</p>
+          <p className="font-semibold text-navy text-sm">{t("profile.allergies")}</p>
         </div>
         {patient.allergies.length ? (
           <div className="flex flex-wrap gap-2">
@@ -89,26 +93,26 @@ export function MedicalInformationPage() {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-text-secondary">No known allergies.</p>
+          <p className="text-sm text-text-secondary">{t("profile.noAllergies")}</p>
         )}
       </Card>
       <Card>
         <div className="flex items-center gap-2 mb-3">
           <Pill className="w-4.5 h-4.5 text-navy-dark" />
-          <p className="font-semibold text-navy text-sm">Medications</p>
+          <p className="font-semibold text-navy text-sm">{t("profile.medications")}</p>
         </div>
         {patient.medications.length ? (
           <ul className="text-sm text-navy space-y-1.5">
             {patient.medications.map((m) => <li key={m}>• {m}</li>)}
           </ul>
         ) : (
-          <p className="text-sm text-text-secondary">No current medications.</p>
+          <p className="text-sm text-text-secondary">{t("profile.noMedications")}</p>
         )}
       </Card>
       <Card>
         <div className="flex items-center gap-2 mb-3">
           <Phone className="w-4.5 h-4.5 text-navy-dark" />
-          <p className="font-semibold text-navy text-sm">Emergency contacts</p>
+          <p className="font-semibold text-navy text-sm">{t("profile.emergencyContacts")}</p>
         </div>
         <div className="flex flex-col gap-2">
           {patient.emergencyContacts.map((c) => (
@@ -513,6 +517,9 @@ export function PatientSettingsPage() {
           </label>
         ))}
       </Card>
+
+      {/* Account Deletion Request Section */}
+      <DeleteAccountSection />
 
       {/* OTP Credential Update Modal */}
       {updateModalType && (

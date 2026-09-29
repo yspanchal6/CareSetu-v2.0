@@ -93,9 +93,19 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     const roleUpper = (user.role || "").toUpperCase();
 
-    // If socket is already connected with valid reference, keep existing instance
-    if (socketRef.current && socketRef.current.connected) {
-      return;
+    // If socket is connected for the EXACT SAME session & user, preserve existing instance
+    if (socketRef.current) {
+      const socketToken = (socketRef.current as any)._sessionToken;
+      const socketUserId = (socketRef.current as any)._sessionUserId;
+      if (socketToken === token && socketUserId === user.id && socketRef.current.connected) {
+        return;
+      }
+      // Session or user changed: disconnect old socket before creating a new session socket
+      console.log(`[Socket] Session change detected (${socketUserId} -> ${user.id}). Disconnecting previous socket.`);
+      socketRef.current.disconnect();
+      socketRef.current = null;
+      setSocket(null);
+      setConnected(false);
     }
 
     const newSocket = io(SOCKET_URL, {
@@ -109,6 +119,9 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       randomizationFactor: 0.5,
       timeout: 10000,
     });
+
+    (newSocket as any)._sessionToken = token;
+    (newSocket as any)._sessionUserId = user.id;
 
     socketRef.current = newSocket;
     setSocket(newSocket);

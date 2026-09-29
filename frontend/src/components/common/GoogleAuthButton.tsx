@@ -83,45 +83,87 @@ export default function GoogleAuthButton({
           fbErr?.code === 'auth/popup-closed-by-user' ||
           fbErr?.code === 'auth/cancelled-popup-request'
         ) {
-          showToast('info', 'Google Sign-In was cancelled.');
+          showToast('info', 'Google sign-in was cancelled.');
           setLoading(false);
           return;
         }
 
-        console.warn('Firebase popup sign-in encountered error, checking fallback mode:', fbErr?.message);
+        if (fbErr?.code === 'auth/popup-blocked') {
+          const msg = 'Google sign-in popup was blocked. Please allow popups and try again.';
+          showToast('error', msg);
+          if (onError) onError(msg);
+          setLoading(false);
+          return;
+        }
 
-        // Fallback for local dev/test environment if Firebase Auth domain is not whitelisted locally
-        const syntheticToken = `synthetic-google-token-demo:google.user.${Date.now().toString().slice(-4)}@example.com:Google User:google-sub-${Date.now()}`;
-        idToken = syntheticToken;
+        if (
+          fbErr?.code === 'auth/unauthorized-domain' ||
+          fbErr?.code === 'auth/invalid-api-key' ||
+          fbErr?.code === 'auth/configuration-not-found' ||
+          fbErr?.code === 'auth/operation-not-allowed'
+        ) {
+          const msg = fbErr?.code === 'auth/unauthorized-domain'
+            ? 'Current domain is not authorized in Firebase OAuth settings.'
+            : 'Google sign-in is not configured correctly. Please contact support.';
+          showToast('error', msg);
+          if (onError) onError(msg);
+          setLoading(false);
+          return;
+        }
+
+        if (fbErr?.code === 'auth/network-request-failed') {
+          const msg = 'Unable to connect to Google authentication server. Please check your internet connection and try again.';
+          showToast('error', msg);
+          if (onError) onError(msg);
+          setLoading(false);
+          return;
+        }
+
+        const msg = 'Google authentication failed. Please try again.';
+        showToast('error', msg);
+        if (onError) onError(msg);
+        setLoading(false);
+        return;
       }
 
       if (!idToken) {
         throw new Error('Could not retrieve Google ID token.');
       }
 
-      // 2. Authenticate token with CareSetu backend
+      // 2. Authenticate token with CareSetu backend & establish session
       const res = await authApi.googleAuth(idToken, role, isRegistration, profileData);
-      if (res.success && res.user && res.token) {
-        showToast("success", res.message || `Welcome, ${res.user.name}.`);
+
+      if (res && res.success && res.user && res.token && res.user.id && res.user.role) {
+        // Confirm backend session in AuthContext BEFORE displaying success message
         await setSession(res.user, res.token);
+        showToast("success", res.message || `Welcome, ${res.user.name || 'user'}.`);
         if (onSuccess) onSuccess();
+
+        const userRoleLower = String(res.user.role).toLowerCase();
         if (res.isNewUser) {
           const targetRoute = res.onboardingRoute || (
-            res.user.role.toLowerCase() === 'patient' ? '/patient/profile-completion' :
-              res.user.role.toLowerCase() === 'doctor' ? '/doctor/document-verification' :
-                res.user.role.toLowerCase() === 'hospital' ? '/hospital/profile-verification' :
-                  `/${res.user.role.toLowerCase()}/dashboard`
+            userRoleLower === 'patient' ? '/patient/profile-completion' :
+              userRoleLower === 'doctor' ? '/doctor/document-verification' :
+                userRoleLower === 'hospital' ? '/hospital/profile-verification' :
+                  `/${userRoleLower}/dashboard`
           );
           navigate(targetRoute);
         } else {
-          navigate(`/${res.user.role.toLowerCase()}/dashboard`);
+          navigate(`/${userRoleLower}/dashboard`);
         }
       } else {
-        const err = res.message || "Google authentication failed.";
+        const err = "Google authentication succeeded, but CareSetu could not establish your session. Please try again.";
         showToast("error", err);
         if (onError) onError(err);
       }
     } catch (err: any) {
+      console.error('[GOOGLE_AUTH_DEBUG]', {
+        endpoint: '/api/auth/google',
+        status: err?.status,
+        errorCode: err?.code || err?.data?.code,
+        message: err?.message,
+      });
+
       if (err?.status === 429) {
         const retryAfter = err?.retryAfterSeconds || 30;
         const errorMsg = `Too many authentication attempts. Please wait ${retryAfter} seconds before trying again.`;
@@ -142,11 +184,28 @@ export default function GoogleAuthButton({
         return;
       }
 
-      const errorMsg =
-        err?.data?.error ||
-        err?.response?.data?.message ||
-        err?.message ||
-        "Google authentication failed. Please try again.";
+      if (err?.status === 401) {
+        const msg = "Google authentication succeeded, but CareSetu could not establish your session. Please try again.";
+        showToast("error", msg);
+        if (onError) onError(msg);
+        return;
+      }
+
+      if (err?.status === 403) {
+        const msg = err?.message || "This Google account is restricted or not authorized for this account type.";
+        showToast("error", msg);
+        if (onError) onError(msg);
+        return;
+      }
+
+      if (!navigator.onLine) {
+        const msg = "Unable to connect to the server. Please try again.";
+        showToast("error", msg);
+        if (onError) onError(msg);
+        return;
+      }
+
+      const errorMsg = "Google authentication succeeded, but CareSetu could not establish your session. Please try again.";
       showToast("error", errorMsg);
       if (onError) onError(errorMsg);
     } finally {

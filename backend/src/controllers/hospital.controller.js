@@ -1052,3 +1052,72 @@ exports.consumeApprovalEvent = async (req, res, next) => {
     next(err);
   }
 };
+
+/**
+ * GET /api/hospitals/directory
+ */
+exports.getDirectory = async (req, res, next) => {
+  try {
+    const { HospitalDirectoryService } = require('../services/hospital-directory.service');
+    const { page, limit, search, state, district, type, source, sort } = req.query;
+
+    const result = await HospitalDirectoryService.getDirectory({
+      page,
+      limit,
+      search,
+      state,
+      district,
+      type,
+      source,
+      sort
+    });
+
+    return res.json({
+      success: true,
+      ...result
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+/**
+ * GET /api/hospitals/directory/filters
+ */
+exports.getDirectoryFilters = async (req, res, next) => {
+  try {
+    const { HospitalDirectoryService } = require('../services/hospital-directory.service');
+    const { state } = req.query;
+    const filters = await HospitalDirectoryService.getFilterOptions(state);
+
+    return res.json({
+      success: true,
+      filters
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+/**
+ * GET /api/hospitals/directory/:id
+ */
+exports.getDirectoryItemById = async (req, res, next) => {
+  try {
+    const { HospitalDirectoryService } = require('../services/hospital-directory.service');
+    const { id } = req.params;
+
+    const hospital = await HospitalDirectoryService.getDirectoryById(id);
+    if (!hospital) {
+      return res.status(404).json({ success: false, error: 'Hospital record not found in directory.' });
+    }
+
+    return res.json({
+      success: true,
+      hospital
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+

@@ -80,8 +80,12 @@ function sanitizeUserResponse(user) {
   } = user;
 
   const isPatientComplete = Boolean(
-    safeUser.isVerified ||
-    (safeUser.patient && safeUser.patient.name && String(safeUser.patient.name).trim().length >= 2 && Number(safeUser.patient.age) > 0 && safeUser.patient.gender && String(safeUser.patient.gender).toUpperCase() !== 'UNSPECIFIED')
+    safeUser.patient &&
+    safeUser.patient.name &&
+    String(safeUser.patient.name).trim().length >= 2 &&
+    Number(safeUser.patient.age) > 0 &&
+    safeUser.patient.gender &&
+    String(safeUser.patient.gender).toUpperCase() !== 'UNSPECIFIED'
   );
 
   return {

@@ -6,6 +6,7 @@ import { SearchInput } from "../../components/common/Input";
 import Button from "../../components/common/Button";
 import { useToast } from "../../components/common/Toast";
 import { ShieldCheck, CheckCircle2 } from "lucide-react";
+import { DeleteAccountSection } from "../../components/common/DeleteAccountSection";
 
 export function DoctorPatientsPage() {
   const [query, setQuery] = useState("");
@@ -90,14 +91,18 @@ export function DoctorReportsPage() {
 
 export function DoctorSettingsPage() {
   return (
-    <Card className="max-w-lg">
-      <p className="font-semibold text-navy text-sm mb-3">Availability</p>
-      {["On duty for new critical cases", "Notify me for AI-flagged cases", "Share notes with hospital admin"].map((s) => (
-        <label key={s} className="flex items-center justify-between py-2 text-sm text-navy">
-          {s}
-          <input type="checkbox" defaultChecked className="w-4 h-4 accent-sky" />
-        </label>
-      ))}
-    </Card>
+    <div className="max-w-lg space-y-4">
+      <Card>
+        <p className="font-semibold text-navy text-sm mb-3">Availability & Preferences</p>
+        {["On duty for new critical cases", "Notify me for AI-flagged cases", "Share notes with hospital admin"].map((s) => (
+          <label key={s} className="flex items-center justify-between py-2 text-sm text-navy border-b border-slate-50 last:border-0">
+            <span>{s}</span>
+            <input type="checkbox" defaultChecked className="w-4 h-4 accent-sky cursor-pointer" />
+          </label>
+        ))}
+      </Card>
+
+      <DeleteAccountSection />
+    </div>
   );
 }

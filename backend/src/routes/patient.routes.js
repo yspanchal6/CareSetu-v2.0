@@ -4,8 +4,7 @@ const patientController = require('../controllers/patient.controller');
 
 const router = express.Router();
 
-router.use(auth, denyGuest, authorize('PATIENT'));
-router.get('/profile', patientController.getProfile);
-router.put('/profile', patientController.updateProfile);
+router.get('/profile', auth, denyGuest, authorize('PATIENT'), patientController.getProfile);
+router.put('/profile', auth, denyGuest, authorize('PATIENT'), patientController.updateProfile);
 
 module.exports = router;

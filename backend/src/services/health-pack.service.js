@@ -179,13 +179,28 @@ class HealthPackService {
       where: {
         healthPackId: healthPack.id,
         sharedWithHospitalId: hospitalId,
-        status: 'ACTIVE',
       },
     });
-    if (existingShare) return existingShare;
 
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + 24);
+
+    if (existingShare) {
+      // If active and not expired, return existing share
+      if (existingShare.status === 'ACTIVE' && (!existingShare.expiresAt || new Date(existingShare.expiresAt) > new Date())) {
+        return existingShare;
+      }
+      // Otherwise renew the share
+      return await prisma.healthPackShare.update({
+        where: { id: existingShare.id },
+        data: {
+          expiresAt,
+          status: 'ACTIVE',
+          sharedWithUserId: hospitalUserId || existingShare.sharedWithUserId,
+          consentGranted: true,
+        },
+      });
+    }
 
     const share = await prisma.healthPackShare.create({
       data: {
@@ -194,6 +209,7 @@ class HealthPackService {
         sharedWithUserId: hospitalUserId,
         consentGranted: true,
         expiresAt,
+        status: 'ACTIVE',
       },
     });
 
@@ -219,24 +235,49 @@ class HealthPackService {
     }
 
     // Authorization check: Verify hospital is assigned or requested for this case
-    if (emergencyCase.hospitalId !== hospital.id) {
+    const isAssignedHospital = emergencyCase.hospitalId === hospital.id;
+    let isRequestedHospital = false;
+    if (!isAssignedHospital) {
       const request = await prisma.hospitalRequest.findFirst({
-        where: { emergencyCaseId: emergencyCase.id, hospitalId: hospital.id },
+        where: {
+          emergencyCaseId: emergencyCase.id,
+          hospitalId: hospital.id,
+          status: { in: ['ACCEPTED', 'PENDING'] },
+        },
       });
-      if (!request) {
-        throw new Error('Unauthorized: Hospital is not assigned or requested for this emergency case.');
+      if (request) {
+        isRequestedHospital = true;
       }
     }
 
+    if (!isAssignedHospital && !isRequestedHospital) {
+      throw new Error('Unauthorized: Hospital is not assigned or requested for this emergency case.');
+    }
+
     // Retrieve active HealthPack for the patient
-    const healthPack = await prisma.healthPack.findFirst({
+    let healthPack = await prisma.healthPack.findFirst({
       where: { patientId: emergencyCase.patientId, status: 'ACTIVE' },
       include: { shares: true },
       orderBy: { createdAt: 'desc' },
     });
 
     if (!healthPack) {
-      throw new Error('No active HealthPack found for this patient.');
+      const patient = await prisma.patient.findUnique({ where: { id: emergencyCase.patientId } });
+      const initialData = {
+        name: patient?.name || 'Patient',
+        bloodGroup: patient?.bloodGroup || 'NOT_PROVIDED',
+        allergies: patient?.allergies || 'None reported',
+        medications: patient?.currentMedications || 'None reported',
+        conditions: patient?.conditions || patient?.medicalConditions || 'NOT_PROVIDED',
+        heartCondition: patient?.heartCondition || 'UNKNOWN',
+        diabetesStatus: patient?.diabetesStatus || 'UNKNOWN',
+        hypertensionStatus: patient?.hypertensionStatus || 'UNKNOWN',
+      };
+      healthPack = await this.createHealthPack(emergencyCase.patientId, initialData);
+      healthPack = await prisma.healthPack.findUnique({
+        where: { id: healthPack.id },
+        include: { shares: true },
+      });
     }
 
     // Check HealthPack overall expiration
@@ -245,14 +286,29 @@ class HealthPackService {
     }
 
     // Normalize shared_with values as string array of UUIDs
-    const activeShares = (healthPack.shares || []).filter(
+    let activeShares = (healthPack.shares || []).filter(
       (s) => s.status === 'ACTIVE' && (!s.expiresAt || new Date(s.expiresAt) > new Date())
     );
 
-    const shared_with = activeShares.map((s) => String(s.sharedWithHospitalId || s.sharedWithUserId || '')).filter(Boolean);
+    let shared_with = activeShares.map((s) => String(s.sharedWithHospitalId || s.sharedWithUserId || '')).filter(Boolean);
+    let isSharedWithMember = shared_with.includes(String(hospital.id)) || shared_with.includes(String(hospitalUserId));
 
-    // Verify hospital ID or hospital user ID exists in shared_with
-    const isSharedWithMember = shared_with.includes(String(hospital.id)) || shared_with.includes(String(hospitalUserId));
+    const inactiveCaseStatuses = ['CLOSED', 'CANCELLED', 'RESOLVED', 'EXPIRED', 'REJECTED'];
+    const isCaseActive = !inactiveCaseStatuses.includes(String(emergencyCase.status).toUpperCase());
+
+    // If hospital IS assigned/requested for an ACTIVE emergency case but share is missing/expired, grant/renew temporary HealthPack access
+    if (!isSharedWithMember && (isAssignedHospital || isRequestedHospital) && isCaseActive) {
+      await this.shareHealthPackWithHospital(emergencyCase.patientId, hospital.id, hospitalUserId);
+      healthPack = await prisma.healthPack.findUnique({
+        where: { id: healthPack.id },
+        include: { shares: true },
+      });
+      activeShares = (healthPack.shares || []).filter(
+        (s) => s.status === 'ACTIVE' && (!s.expiresAt || new Date(s.expiresAt) > new Date())
+      );
+      shared_with = activeShares.map((s) => String(s.sharedWithHospitalId || s.sharedWithUserId || '')).filter(Boolean);
+      isSharedWithMember = shared_with.includes(String(hospital.id)) || shared_with.includes(String(hospitalUserId));
+    }
 
     // Safe diagnostic log (DO NOT log keys, medical data, or tokens)
     console.log('[HealthPack Diagnostic Log]', {
@@ -327,12 +383,55 @@ class HealthPackService {
       },
     });
 
-    // Never return encrypted_data, iv, or keys
-    // Only expose the display name after all authorization/expiry checks above passed.
+    // Fetch latest patient profile fields and merge live medical data with encrypted HealthPack & emergency summary
     const patientRecord = await prisma.patient.findUnique({
       where: { id: healthPack.patientId },
-      select: { id: true, name: true },
+      select: {
+        id: true,
+        name: true,
+        bloodGroup: true,
+        allergies: true,
+        medicalConditions: true,
+        conditions: true,
+        heartCondition: true,
+        diabetesStatus: true,
+        hypertensionStatus: true,
+        medications: true,
+      },
     });
+
+    const isMeaningful = (v) => {
+      if (v == null) return false;
+      const s = String(v).trim();
+      return s.length > 0 && s !== 'NOT_PROVIDED' && s !== 'UNKNOWN' && s !== 'None reported';
+    };
+
+    const project = (val1, val2, val3, fallback) => {
+      if (isMeaningful(val1)) return String(val1).trim();
+      if (isMeaningful(val2)) return String(val2).trim();
+      if (isMeaningful(val3)) return String(val3).trim();
+      return fallback;
+    };
+
+    const patientConditions = patientRecord?.conditions || patientRecord?.medicalConditions || null;
+    const summaryConditions = decryptedMedicalSummary?.confirmedConditions || decryptedMedicalSummary?.conditions || null;
+
+    const mergedHealthData = {
+      ...healthData,
+      bloodGroup: project(patientRecord?.bloodGroup, decryptedMedicalSummary?.bloodGroup, healthData.bloodGroup, healthData.bloodGroup || null),
+      allergies: project(patientRecord?.allergies, decryptedMedicalSummary?.allergies, healthData.allergies, healthData.allergies && healthData.allergies !== 'NOT_PROVIDED' ? healthData.allergies : null),
+      medications: project(patientRecord?.medications, decryptedMedicalSummary?.currentMedications || decryptedMedicalSummary?.medications, healthData.medications, healthData.medications && healthData.medications !== 'NOT_PROVIDED' ? healthData.medications : null),
+      conditions: project(patientConditions, summaryConditions, healthData.conditions || healthData.medicalConditions, healthData.conditions && healthData.conditions !== 'NOT_PROVIDED' ? healthData.conditions : null),
+      medicalConditions: project(patientConditions, summaryConditions, healthData.medicalConditions || healthData.conditions, healthData.medicalConditions && healthData.medicalConditions !== 'NOT_PROVIDED' ? healthData.medicalConditions : null),
+      heartCondition: project(patientRecord?.heartCondition, decryptedMedicalSummary?.cardiacCondition || decryptedMedicalSummary?.heartCondition, healthData.heartCondition, healthData.heartCondition || 'UNKNOWN'),
+      diabetesStatus: project(patientRecord?.diabetesStatus, decryptedMedicalSummary?.diabetesStatus, healthData.diabetesStatus, healthData.diabetesStatus || 'UNKNOWN'),
+      hypertensionStatus: project(patientRecord?.hypertensionStatus, decryptedMedicalSummary?.hypertensionStatus, healthData.hypertensionStatus, healthData.hypertensionStatus || 'UNKNOWN'),
+    };
+
+    // Trigger async background refresh of encrypted HealthPack in DB if needed
+    try {
+      this.refreshHealthPackFromPatient(healthPack.patientId).catch(() => {});
+    } catch (e) {}
 
     return {
       id: healthPack.id,
@@ -343,7 +442,7 @@ class HealthPackService {
       },
       createdAt: healthPack.createdAt,
       expiresAt: shareRecord?.expiresAt || healthPack.expiresAt,
-      healthData,
+      healthData: mergedHealthData,
       documents,
       medicalSummary: decryptedMedicalSummary,
     };

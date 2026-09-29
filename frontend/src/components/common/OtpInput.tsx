@@ -90,7 +90,7 @@ export const OtpInput = ({
   }, [status]);
 
   const getBoxStyles = () => {
-    const base = "w-9 sm:w-12 h-11 sm:h-14 text-lg sm:text-2xl font-bold border-2 rounded-lg transition-all duration-300 outline-none motion-reduce:transition-none";
+    const base = "w-9 sm:w-12 h-11 sm:h-14 text-lg sm:text-2xl font-bold text-center border-2 rounded-lg transition-all duration-300 outline-none motion-reduce:transition-none";
     if (status === 'success') {
       return `${base} border-emerald-500 bg-emerald-50/50 text-emerald-700 shadow-sm shadow-emerald-100 scale-[1.02]`;
     }

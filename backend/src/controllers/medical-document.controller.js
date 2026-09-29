@@ -98,6 +98,11 @@ const downloadDocument = async (req, res, next) => {
       contentType = 'image/png';
     }
 
+    // Set anti-caching security headers
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `inline; filename="${safeFileName}"`);
     return res.sendFile(fileInfo.fullPath);
@@ -115,9 +120,12 @@ const downloadDocument = async (req, res, next) => {
   }
 };
 
+const viewDocument = downloadDocument;
+
 module.exports = {
   uploadDocument,
   getMyDocuments,
   deleteDocument,
   downloadDocument,
+  viewDocument,
 };

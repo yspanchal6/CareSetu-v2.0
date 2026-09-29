@@ -44,7 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           avatarInitials: (res.user.name || res.user.email || "US").slice(0, 2).toUpperCase(),
           isGuest: Boolean((res.user as any).isGuest || roleStr === "guest"),
           isVerified: Boolean(res.user.isVerified),
-          isProfileComplete: Boolean(res.user.isProfileComplete || res.user.isVerified),
+          isProfileComplete: Boolean(res.user.isProfileComplete),
           patient: res.user.patient || user?.patient,
         };
         setUser(appUser);
@@ -64,14 +64,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const updatedUser: User = {
         ...prev,
         ...updatedData,
-        isVerified: updatedData?.isVerified ?? updatedData?.isProfileComplete ?? prev.isVerified,
-        isProfileComplete: updatedData?.isProfileComplete ?? updatedData?.isVerified ?? prev.isProfileComplete,
+        isVerified: updatedData?.isVerified ?? prev.isVerified,
+        isProfileComplete: updatedData?.isProfileComplete ?? prev.isProfileComplete,
         patient: updatedData?.patient ? { ...prev.patient, ...updatedData.patient } : prev.patient,
       };
       sessionStorage.setItem("caresetu_user", JSON.stringify(updatedUser));
       return updatedUser;
     });
   };
+
+  useEffect(() => {
+    const handleUnauthorizedEvent = () => {
+      console.warn("[AuthContext] Account termination or unauthorized response detected — clearing session.");
+      setUser(null);
+      sessionStorage.removeItem("caresetu_user");
+      clearOfflineProfile();
+      clearAuthToken();
+    };
+
+    window.addEventListener("caresetu:unauthorized", handleUnauthorizedEvent);
+    return () => {
+      window.removeEventListener("caresetu:unauthorized", handleUnauthorizedEvent);
+    };
+  }, []);
 
   useEffect(() => {
     const token = getAuthToken();
@@ -98,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               avatarInitials: (res.user.name || res.user.email || "GU").slice(0, 2).toUpperCase(),
               isGuest: Boolean((res.user as any).isGuest || roleStr === "guest"),
               isVerified: Boolean(res.user.isVerified),
-              isProfileComplete: Boolean(res.user.isProfileComplete || res.user.isVerified),
+              isProfileComplete: Boolean(res.user.isProfileComplete),
               patient: res.user.patient,
             };
             setUser(appUser);
@@ -155,7 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         role: roleStr,
         avatarInitials: (res.user.name || res.user.email).slice(0, 2).toUpperCase(),
         isVerified: Boolean(res.user.isVerified),
-        isProfileComplete: Boolean(res.user.isProfileComplete || res.user.isVerified),
+        isProfileComplete: Boolean(res.user.isProfileComplete),
         patient: res.user.patient,
       };
 
@@ -199,7 +214,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         role: roleStr,
         avatarInitials: (res.user.name || res.user.email).slice(0, 2).toUpperCase(),
         isVerified: Boolean(res.user.isVerified),
-        isProfileComplete: Boolean(res.user.isProfileComplete || res.user.isVerified),
+        isProfileComplete: Boolean(res.user.isProfileComplete),
         patient: res.user.patient,
       };
 
@@ -233,7 +248,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role: roleStr,
       avatarInitials: (resUser.name || resUser.email || "US").slice(0, 2).toUpperCase(),
       isVerified: Boolean(resUser.isVerified),
-      isProfileComplete: Boolean(resUser.isProfileComplete || resUser.isVerified),
+      isProfileComplete: Boolean(resUser.isProfileComplete),
       patient: resUser.patient,
     };
 

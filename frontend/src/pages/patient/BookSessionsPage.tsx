@@ -6,6 +6,7 @@ import Badge from "../../components/common/Badge";
 import Button from "../../components/common/Button";
 import Modal from "../../components/common/Modal";
 import { useToast } from "../../components/common/Toast";
+import { useTranslation } from "../../i18n/I18nContext";
 
 const doctors = [
   { id: "D1", name: "Dr. Rina Naik", specialty: "Cardiologist", rating: 4.8, nextSlot: "Today, 4:30 PM" },
@@ -19,6 +20,7 @@ const slots = ["10:00 AM", "11:30 AM", "2:00 PM", "4:30 PM", "6:00 PM"];
 export default function BookSessionsPage() {
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { t } = useTranslation();
   const [selectedDoctor, setSelectedDoctor] = useState<(typeof doctors)[number] | null>(null);
   const [selectedSlot, setSelectedSlot] = useState(slots[0]);
   const [booked, setBooked] = useState<string[]>([]);
@@ -26,12 +28,12 @@ export default function BookSessionsPage() {
   return (
     <div className="max-w-2xl mx-auto flex flex-col gap-5 pb-6">
       <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm font-semibold text-text-secondary w-fit">
-        <ArrowLeft className="w-4 h-4" /> Back
+        <ArrowLeft className="w-4 h-4" /> {t("common.back")}
       </button>
 
       <div>
-        <h2 className="font-bold text-navy text-lg">Book a doctor session</h2>
-        <p className="text-sm text-text-secondary mt-1">Schedule a non-emergency consultation with a CareSetu network doctor.</p>
+        <h2 className="font-bold text-navy text-lg">{t("bookSessions.title")}</h2>
+        <p className="text-sm text-text-secondary mt-1">{t("bookSessions.subtitle")}</p>
       </div>
 
       <div className="grid sm:grid-cols-2 gap-4">

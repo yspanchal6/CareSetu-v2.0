@@ -81,21 +81,38 @@ try {
 }
 
 export const requestNotificationPermission = async (): Promise<string | null> => {
-  if (!messaging) return null;
+  if (!messaging || typeof window === 'undefined' || !('Notification' in window)) return null;
+
+  // Do NOT request permission automatically if not already granted to prevent browser violation
+  if (Notification.permission !== 'granted') {
+    return null;
+  }
+
+  try {
+    const currentToken = await getToken(messaging, {
+      vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY
+    });
+    return currentToken || null;
+  } catch (error) {
+    console.warn('[FCM] Could not retrieve FCM token:', error);
+    return null;
+  }
+};
+
+export const requestNotificationPermissionWithUserGesture = async (): Promise<string | null> => {
+  if (!messaging || typeof window === 'undefined' || !('Notification' in window)) return null;
 
   try {
     const permission = await Notification.requestPermission();
     if (permission === 'granted') {
       const currentToken = await getToken(messaging, {
-        vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY // Provide if using VAPID keys for web
+        vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY
       });
-      if (currentToken) {
-        return currentToken;
-      }
+      return currentToken || null;
     }
     return null;
   } catch (error) {
-    console.error('An error occurred while retrieving token. ', error);
+    console.error('[FCM] Error requesting notification permission:', error);
     return null;
   }
 };

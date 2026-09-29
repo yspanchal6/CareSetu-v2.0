@@ -118,8 +118,8 @@ class OtpService {
 
     let anySent = channels.some((ch) => ch.status === 'sent');
 
-    if (!anySent && (process.env.NODE_ENV === 'test' || process.env.ALLOW_DEV_OTP === 'true')) {
-      // Allow synthetic fallback in test/dev mode if external SMS/Email providers fail
+    if (!anySent && (process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEV_OTP === 'true')) {
+      // Allow synthetic fallback in development/test mode if external SMS/Email providers fail or are unconfigured
       anySent = true;
       channels.forEach((ch) => {
         ch.status = 'sent';
@@ -138,7 +138,9 @@ class OtpService {
       console.error('[OTP_SERVICE] Delivery Failed — OTP Record Cleared:', { identifier, purpose, channels });
 
       const err = new Error(safeErrorMsg);
-      err.status = emailChannel?.httpStatus || smsChannel?.httpStatus || 502;
+      const rawStatus = emailChannel?.httpStatus || smsChannel?.httpStatus;
+      // External provider status codes like 401/403 (e.g. Brevo/TextBee API key issues) must NEVER be sent as client 401 Unauthorized
+      err.status = (rawStatus && rawStatus !== 401 && rawStatus !== 403) ? rawStatus : 502;
       throw err;
     }
 
@@ -152,7 +154,7 @@ class OtpService {
         ...(c.mock ? { mock: true } : {}),
       })),
       mock: channels.some((channel) => channel.status === 'sent' && channel.mock === true),
-      ...((process.env.NODE_ENV === 'test' || process.env.ALLOW_DEV_OTP === 'true') ? { devOtp: otp } : {}),
+      ...((process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEV_OTP === 'true') ? { devOtp: otp } : {}),
     };
   }
 

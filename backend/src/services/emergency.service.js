@@ -148,8 +148,15 @@ const createEmergencyCase = async ({ userId, emergencyType, severity, latitude, 
   }
 
   // 2. Validate GPS
-  if (latitude == null || longitude == null) {
-    const error = new Error("Current location is required for emergency SOS.");
+  const latNum = Number(latitude);
+  const lngNum = Number(longitude);
+  if (latitude == null || longitude == null || !Number.isFinite(latNum) || !Number.isFinite(lngNum)) {
+    const error = new Error("Valid current location coordinates are required for emergency SOS.");
+    error.status = 400;
+    throw error;
+  }
+  if (latNum < -90 || latNum > 90 || lngNum < -180 || lngNum > 180) {
+    const error = new Error("Invalid latitude or longitude coordinate ranges.");
     error.status = 400;
     throw error;
   }
@@ -186,8 +193,8 @@ const createEmergencyCase = async ({ userId, emergencyType, severity, latitude, 
       emergencyType: safetyResult.matchedRule.includes('CARDIAC') ? 'CARDIAC' : (emergencyType || 'MEDICAL'),
       severity: safetyResult.severity,
       location: {
-        latitude: Number(latitude),
-        longitude: Number(longitude),
+        latitude: latNum,
+        longitude: lngNum,
       },
       detectedWords: safetyResult.matchedRule !== 'Default' ? [safetyResult.matchedRule] : [],
       status: 'PENDING',
@@ -209,15 +216,29 @@ const createEmergencyCase = async ({ userId, emergencyType, severity, latitude, 
   }
 
   // 6. Get Active Hospitals and Call Hospital Matching Service
-  console.log('[EmergencyService] Patient:', latitude, longitude);
-  const matchedHospitals = await hospitalMatchingService.findBestHospitals({
-    latitude: Number(latitude),
-    longitude: Number(longitude),
-    emergencyType
-  });
+  let matchedHospitals = [];
+  try {
+    const findFn = typeof hospitalMatchingService.findBestHospitals === 'function'
+      ? hospitalMatchingService.findBestHospitals
+      : hospitalMatchingService.HospitalMatchingService?.findBestHospitals;
 
-  if (matchedHospitals.length === 0) {
-    console.error('[EmergencyService] ❌ NO HOSPITALS MATCHED');
+    if (typeof findFn === 'function') {
+      matchedHospitals = await findFn({
+        latitude: latNum,
+        longitude: lngNum,
+        emergencyType
+      });
+    } else {
+      console.warn('[EmergencyService] ⚠️ hospitalMatchingService.findBestHospitals function is unavailable');
+    }
+  } catch (matchingErr) {
+    console.error('[EmergencyService] Hospital matching non-fatal error:', matchingErr.message);
+    matchedHospitals = [];
+  }
+
+  if (!Array.isArray(matchedHospitals) || matchedHospitals.length === 0) {
+    console.log('[EmergencyService] ℹ️ No matching hospital candidates found for coordinates');
+    matchedHospitals = [];
   }
 
   // 7. Create Hospital Requests

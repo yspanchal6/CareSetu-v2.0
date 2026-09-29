@@ -3,12 +3,15 @@ import { defineConfig } from 'vite'
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: process.env.VITE_BASE_PATH || (process.env.NODE_ENV === 'production' ? '/CareSetu/' : '/'),
+  base: process.env.VITE_BASE_PATH || (process.env.NODE_ENV === 'production' ? '/CareSetu-v2.0/' : '/'),
   plugins: [react()],
   server: {
     host: '0.0.0.0',
     port: 5173,
     strictPort: true, // Prevents Vite from picking a different port if 5173 is busy
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+    },
     allowedHosts: ['.trycloudflare.com', '.loca.lt', '.ngrok-free.app', 'localhost'],
     // REMOVED the hmr block completely
     proxy: {
@@ -31,6 +34,9 @@ export default defineConfig({
   preview: {
     port: 4173,
     strictPort: true,
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+    },
     allowedHosts: ['.trycloudflare.com', '.loca.lt', '.ngrok-free.app', 'localhost'],
     proxy: {
       "/api": {

@@ -96,6 +96,22 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
+      if (response.status === 401 && authenticated && path !== "/auth/login" && path !== "/auth/register") {
+        clearAuthToken();
+        sessionStorage.removeItem("caresetu_user");
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("caresetu:unauthorized", {
+              detail: {
+                message: payload?.error || payload?.message || "Your CareSetu account has been permanently terminated.",
+                code: payload?.code,
+                terminated: payload?.terminated,
+              },
+            })
+          );
+        }
+      }
+
       const retryHeader = response.headers.get("Retry-After");
       const retryAfterSeconds = retryHeader ? parseInt(retryHeader, 10) : payload?.retryAfterSeconds;
       const message = payload?.error ?? payload?.message ?? `Request failed (${response.status})`;
@@ -247,13 +263,13 @@ export const authApi = {
     request<{ success: true; message: string; expiresAt: string; channels: Array<{ channel: string; status: string }>; devOtp?: string; mock?: boolean }>("/auth/request-otp", {
       method: "POST",
       authenticated: false,
-      body: typeof target === "string" ? { identifier: target, type } : target,
+      body: typeof target === "string" ? { identifier: target, type, purpose: "LOGIN" } : target,
     }),
   verifyOtp: (target: string | { identifier: string; otpCode: string; type?: string; purpose?: string }, otpCode?: string, type: string = "email") =>
     request<AuthResponse>("/auth/verify-otp", {
       method: "POST",
       authenticated: false,
-      body: typeof target === "string" ? { identifier: target, otpCode, type } : target,
+      body: typeof target === "string" ? { identifier: target, otpCode, type, purpose: "LOGIN" } : target,
     }),
   cancelRegistration: (identifier: string) =>
     request<{ success: boolean; message?: string }>("/auth/cancel-registration", {
@@ -574,6 +590,17 @@ export const settingsApi = {
 };
 
 export const adminApi = {
+  getAnalytics: (params?: { dateRange?: string; startDate?: string; endDate?: string; hospitalId?: string; source?: string; status?: string; platform?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.dateRange) q.append("dateRange", params.dateRange);
+    if (params?.startDate) q.append("startDate", params.startDate);
+    if (params?.endDate) q.append("endDate", params.endDate);
+    if (params?.hospitalId) q.append("hospitalId", params.hospitalId);
+    if (params?.source) q.append("source", params.source);
+    if (params?.status) q.append("status", params.status);
+    if (params?.platform) q.append("platform", params.platform);
+    return request<{ success: boolean; message?: string; error?: string; filters?: any; overview?: any; emergency?: any; matching?: any; hospitals?: any; government?: any; security?: any; users?: any; audit?: any }>(`/admin/analytics?${q.toString()}`);
+  },
   getStats: () =>
     request<{ success: true; stats: any }>("/admin/dashboard/stats"),
   getUsers: (search?: string, role?: string, status?: string) => {
@@ -611,6 +638,12 @@ export const adminApi = {
   },
   getAuditLogs: () =>
     request<{ success: true; logs: any[] }>("/admin/audit-logs"),
+  getEmergencies: (search?: string, status?: string) => {
+    const params = new URLSearchParams();
+    if (search) params.append("search", search);
+    if (status) params.append("status", status);
+    return request<{ success: true; emergencies: any[] }>(`/admin/emergencies?${params.toString()}`);
+  },
   getHospitalVerificationRequests: (status?: string, search?: string) => {
     const params = new URLSearchParams();
     if (status) params.append("status", status);
@@ -625,6 +658,11 @@ export const adminApi = {
     request<{ success: true; message: string; hospital: any; verificationStatus: string }>(`/admin/hospitals/${id}/reject`, {
       method: "POST",
       body: { reason },
+    }),
+  registerHospital: (data: any) =>
+    request<{ success: true; message: string; hospital: any }>("/admin/hospitals/register", {
+      method: "POST",
+      body: data,
     }),
 };
 
@@ -734,6 +772,314 @@ export const geocodingApi = {
   reverseGeocode: (lat: number, lng: number) => {
     return request<{ success: boolean; address: string; city: string; state: string; pincode: string; latitude: number; longitude: number }>(`/geocoding/reverse?lat=${lat}&lng=${lng}`);
   },
+};
+
+export const accountDeletionApi = {
+  submitDeletionRequest: (reason: string, confirmationText: string) =>
+    request<{ success: boolean; message: string; request?: any; terminated?: boolean }>("/account-deletion/request", {
+      method: "POST",
+      body: { reason, confirmationText },
+    }),
+
+  getMyDeletionRequest: () =>
+    request<{ success: boolean; request: any | null }>("/account-deletion/my-request"),
+
+  getAdminDeletionRequests: () =>
+    request<{ success: boolean; requests: any[] }>("/account-deletion/admin/requests"),
+
+  approveDeletionRequest: (id: string) =>
+    request<{ success: boolean; message: string }>(`/account-deletion/admin/requests/${id}/approve`, {
+      method: "POST",
+    }),
+
+  rejectDeletionRequest: (id: string, adminReason: string) =>
+    request<{ success: boolean; message: string; request?: any }>(`/account-deletion/admin/requests/${id}/reject`, {
+      method: "POST",
+      body: { adminReason },
+    }),
+};
+
+export interface GovDatasetSummary {
+  key: string;
+  name: string;
+  source: string;
+  sourceUrl: string;
+  period: string;
+  records: number;
+  lastSync: string | null;
+  status: "NOT_CONFIGURED" | "READY" | "SYNCING" | "SUCCESS" | "FAILED";
+  lastLogMessage: string | null;
+}
+
+export interface ApiSetuInfo {
+  name: string;
+  publisher: string;
+  purpose: string;
+  authentication: string;
+  accessRequirements: string;
+  status: string;
+  documentationUrl: string;
+}
+
+export interface GovHealthDataSummaryResponse {
+  success: boolean;
+  datasets: GovDatasetSummary[];
+  apiSetu: ApiSetuInfo;
+  totalRecords: number;
+}
+
+export interface GovHealthRecordsResponse {
+  success: boolean;
+  records: any[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
+
+export const govHealthDataApi = {
+  getSummary: () =>
+    request<GovHealthDataSummaryResponse>("/admin/gov-health-data/summary"),
+
+  syncDataset: (datasetKey: string) =>
+    request<{ success: boolean; message: string; result: any }>("/admin/gov-health-data/sync", {
+      method: "POST",
+      body: { datasetKey },
+    }),
+
+  getRecords: (params?: { page?: number; limit?: number; source?: string; state?: string; search?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.append("page", String(params.page));
+    if (params?.limit) query.append("limit", String(params.limit));
+    if (params?.source) query.append("source", params.source);
+    if (params?.state) query.append("state", params.state);
+    if (params?.search) query.append("search", params.search);
+    return request<GovHealthRecordsResponse>(`/admin/gov-health-data/records?${query.toString()}`);
+  },
+};
+
+export interface DirectoryHospitalItem {
+  id: string;
+  sourceType: "CARESETU_REGISTERED" | "GOVERNMENT_DATA";
+  source: string;
+  sourceRecordId: string;
+  hospitalName: string;
+  hospitalType: string;
+  state: string;
+  district: string;
+  address?: string | null;
+  pincode?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  phone?: string | null;
+  email?: string | null;
+  isVerified?: boolean;
+  emergencyAvailable?: boolean;
+  capabilities?: string[];
+  hasEmergencyDepartment?: boolean;
+  hasICU?: boolean;
+  hasTraumaUnit?: boolean;
+  hasCardiology?: boolean;
+  hasNeurology?: boolean;
+  hasAmbulance?: boolean;
+  bedCount?: number | null;
+  category?: string | null;
+  admissionData?: Record<string, number> | null;
+  licenseInfo?: string | null;
+  sourceUrl?: string | null;
+  lastSyncedAt?: string | null;
+  updatedAt?: string;
+  rawData?: any;
+}
+
+export interface DirectoryFiltersResponse {
+  success: boolean;
+  filters: {
+    sources: { label: string; value: string }[];
+    states: string[];
+    districts: string[];
+    hospitalTypes: string[];
+  };
+}
+
+export interface DirectoryResponse {
+  success: boolean;
+  data: DirectoryHospitalItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    registeredCount: number;
+    governmentCount: number;
+  };
+}
+
+export const hospitalDirectoryApi = {
+  getDirectory: (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    state?: string;
+    district?: string;
+    type?: string;
+    source?: string;
+    sort?: string;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.append("page", String(params.page));
+    if (params?.limit) query.append("limit", String(params.limit));
+    if (params?.search) query.append("search", params.search);
+    if (params?.state) query.append("state", params.state);
+    if (params?.district) query.append("district", params.district);
+    if (params?.type) query.append("type", params.type);
+    if (params?.source) query.append("source", params.source);
+    if (params?.sort) query.append("sort", params.sort);
+    return request<DirectoryResponse>(`/hospitals/directory?${query.toString()}`);
+  },
+
+  getFilters: (state?: string) => {
+    const query = new URLSearchParams();
+    if (state) query.append("state", state);
+    return request<DirectoryFiltersResponse>(`/hospitals/directory/filters?${query.toString()}`);
+  },
+
+  getById: (id: string) =>
+    request<{ success: boolean; hospital: DirectoryHospitalItem }>(`/hospitals/directory/${id}`),
+};
+
+export interface HospitalMatchItem {
+  id: string;
+  careSetuHospitalId: string;
+  governmentRecordId: string;
+  status: 'PENDING_REVIEW' | 'MATCHED' | 'REJECTED' | 'UNMATCHED';
+  confidenceLevel: 'HIGH' | 'MEDIUM' | 'LOW';
+  confidenceScore: number;
+  matchingMethod: string;
+  matchReasons: string[];
+  conflictReasons: string[];
+  distanceKm?: number | null;
+  evidenceSnapshot?: any;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  rejectedBy?: string | null;
+  rejectedAt?: string | null;
+  rejectionReason?: string | null;
+  unmatchedBy?: string | null;
+  unmatchedAt?: string | null;
+  unmatchReason?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  careSetuHospital: {
+    id: string;
+    name: string;
+    address: string;
+    phone: string;
+    email?: string | null;
+    city?: string | null;
+    state?: string | null;
+    isVerified: boolean;
+    emergencyAvailable: boolean;
+    location?: any;
+  };
+  governmentRecord: {
+    id: string;
+    source: string;
+    sourceDataset: string;
+    sourceRecordId: string;
+    hospitalName: string;
+    state: string;
+    district?: string | null;
+    address?: string | null;
+    pincode?: string | null;
+    hospitalType?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+    bedCount?: number | null;
+    admissionData?: any;
+  };
+}
+
+export interface HospitalMatchingStats {
+  totalGovernmentRecords: number;
+  totalCareSetuHospitals: number;
+  pendingReview: number;
+  highConfidence: number;
+  mediumConfidence: number;
+  lowConfidence: number;
+  matched: number;
+  rejected: number;
+  unmatched: number;
+}
+
+export interface HospitalMatchingResponse {
+  success: boolean;
+  candidates: HospitalMatchItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+  stats: HospitalMatchingStats;
+}
+
+export const hospitalMatchingApi = {
+  getStats: () =>
+    request<{ success: boolean; stats: HospitalMatchingStats }>("/admin/hospital-matching/stats"),
+
+  getCandidates: (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+    confidenceLevel?: string;
+    source?: string;
+    state?: string;
+    district?: string;
+    type?: string;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.append("page", String(params.page));
+    if (params?.limit) query.append("limit", String(params.limit));
+    if (params?.search) query.append("search", params.search);
+    if (params?.status) query.append("status", params.status);
+    if (params?.confidenceLevel) query.append("confidenceLevel", params.confidenceLevel);
+    if (params?.source) query.append("source", params.source);
+    if (params?.state) query.append("state", params.state);
+    if (params?.district) query.append("district", params.district);
+    if (params?.type) query.append("type", params.type);
+    return request<HospitalMatchingResponse>(`/admin/hospital-matching/candidates?${query.toString()}`);
+  },
+
+  getMatchById: (id: string) =>
+    request<{ success: boolean; match: HospitalMatchItem }>(`/admin/hospital-matching/candidates/${id}`),
+
+  generateCandidates: () =>
+    request<{ success: boolean; message: string; evaluatedCount: number; createdCount: number }>(
+      "/admin/hospital-matching/candidates/generate",
+      { method: "POST" }
+    ),
+
+  approveMatch: (id: string) =>
+    request<{ success: boolean; message: string; match: HospitalMatchItem }>(
+      `/admin/hospital-matching/candidates/${id}/approve`,
+      { method: "POST" }
+    ),
+
+  rejectMatch: (id: string, reason?: string) =>
+    request<{ success: boolean; message: string; match: HospitalMatchItem }>(
+      `/admin/hospital-matching/candidates/${id}/reject`,
+      { method: "POST", body: { reason } }
+    ),
+
+  unmatch: (id: string, reason?: string) =>
+    request<{ success: boolean; message: string; match: HospitalMatchItem }>(
+      `/admin/hospital-matching/candidates/${id}/unmatch`,
+      { method: "POST", body: { reason } }
+    ),
 };
 
 

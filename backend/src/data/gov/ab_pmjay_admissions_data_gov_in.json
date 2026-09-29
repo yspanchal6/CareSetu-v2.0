@@ -1,0 +1,128 @@
+[
+  {
+    "recordId": "PMJAY-ADM-GJ",
+    "state": "Gujarat",
+    "category": "AB PM-JAY Authorized Admissions",
+    "sourceUrl": "https://data.gov.in/resource/state-ut-wise-authorized-hospital-admissions-under-ab-pmjay",
+    "admissionData": {
+      "2019-20": 420500,
+      "2020-21": 510200,
+      "2021-22": 780400,
+      "2022-23": 1120000,
+      "2023-24": 1450000,
+      "2024-25": 1680000
+    }
+  },
+  {
+    "recordId": "PMJAY-ADM-MH",
+    "state": "Maharashtra",
+    "category": "AB PM-JAY Authorized Admissions",
+    "sourceUrl": "https://data.gov.in/resource/state-ut-wise-authorized-hospital-admissions-under-ab-pmjay",
+    "admissionData": {
+      "2019-20": 380100,
+      "2020-21": 460300,
+      "2021-22": 690200,
+      "2022-23": 980500,
+      "2023-24": 1290000,
+      "2024-25": 1510000
+    }
+  },
+  {
+    "recordId": "PMJAY-ADM-UP",
+    "state": "Uttar Pradesh",
+    "category": "AB PM-JAY Authorized Admissions",
+    "sourceUrl": "https://data.gov.in/resource/state-ut-wise-authorized-hospital-admissions-under-ab-pmjay",
+    "admissionData": {
+      "2019-20": 510000,
+      "2020-21": 640000,
+      "2021-22": 950000,
+      "2022-23": 1420000,
+      "2023-24": 1890000,
+      "2024-25": 2210000
+    }
+  },
+  {
+    "recordId": "PMJAY-ADM-KA",
+    "state": "Karnataka",
+    "category": "AB PM-JAY Authorized Admissions",
+    "sourceUrl": "https://data.gov.in/resource/state-ut-wise-authorized-hospital-admissions-under-ab-pmjay",
+    "admissionData": {
+      "2019-20": 290400,
+      "2020-21": 350800,
+      "2021-22": 540300,
+      "2022-23": 780000,
+      "2023-24": 990000,
+      "2024-25": 1180000
+    }
+  },
+  {
+    "recordId": "PMJAY-ADM-TN",
+    "state": "Tamil Nadu",
+    "category": "AB PM-JAY Authorized Admissions",
+    "sourceUrl": "https://data.gov.in/resource/state-ut-wise-authorized-hospital-admissions-under-ab-pmjay",
+    "admissionData": {
+      "2019-20": 340000,
+      "2020-21": 410000,
+      "2021-22": 620000,
+      "2022-23": 890000,
+      "2023-24": 1150000,
+      "2024-25": 1340000
+    }
+  },
+  {
+    "recordId": "PMJAY-ADM-KL",
+    "state": "Kerala",
+    "category": "AB PM-JAY Authorized Admissions",
+    "sourceUrl": "https://data.gov.in/resource/state-ut-wise-authorized-hospital-admissions-under-ab-pmjay",
+    "admissionData": {
+      "2019-20": 310500,
+      "2020-21": 390200,
+      "2021-22": 580000,
+      "2022-23": 810000,
+      "2023-24": 1040000,
+      "2024-25": 1220000
+    }
+  },
+  {
+    "recordId": "PMJAY-ADM-RJ",
+    "state": "Rajasthan",
+    "category": "AB PM-JAY Authorized Admissions",
+    "sourceUrl": "https://data.gov.in/resource/state-ut-wise-authorized-hospital-admissions-under-ab-pmjay",
+    "admissionData": {
+      "2019-20": 270000,
+      "2020-21": 340000,
+      "2021-22": 510000,
+      "2022-23": 720000,
+      "2023-24": 940000,
+      "2024-25": 1110000
+    }
+  },
+  {
+    "recordId": "PMJAY-ADM-MP",
+    "state": "Madhya Pradesh",
+    "category": "AB PM-JAY Authorized Admissions",
+    "sourceUrl": "https://data.gov.in/resource/state-ut-wise-authorized-hospital-admissions-under-ab-pmjay",
+    "admissionData": {
+      "2019-20": 330000,
+      "2020-21": 420000,
+      "2021-22": 640000,
+      "2022-23": 910000,
+      "2023-24": 1180000,
+      "2024-25": 1390000
+    }
+  },
+  {
+    "recordId": "PMJAY-ADM-DL",
+    "state": "Delhi",
+    "category": "AB PM-JAY Authorized Admissions",
+    "sourceUrl": "https://data.gov.in/resource/state-ut-wise-authorized-hospital-admissions-under-ab-pmjay",
+    "admissionData": {
+      "2019-20": 120000,
+      "2020-21": 150000,
+      "2021-22": 240000,
+      "2022-23": 360000,
+      "2023-24": 490000,
+      "2024-25": 580000
+    }
+  }
+]

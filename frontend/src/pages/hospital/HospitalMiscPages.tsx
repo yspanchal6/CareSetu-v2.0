@@ -8,6 +8,7 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tool
 import { Star, MapPin, Bed, HeartPulse, Wind, Siren, CheckCircle, RefreshCw } from "lucide-react";
 import EmergencyCaseCard from "../../components/emergency/EmergencyCaseCard";
 import { CredentialUpdateModal } from "../../components/common/CredentialUpdateModal";
+import { DeleteAccountSection } from "../../components/common/DeleteAccountSection";
 
 export function HospitalMatchingRequestsPage() {
   const [requests, setRequests] = useState<any[]>([]);
@@ -669,6 +670,9 @@ export function HospitalSettingsPage() {
           </Button>
         </form>
       </Card>
+
+      {/* Account Deletion Request Section */}
+      <DeleteAccountSection />
 
       {/* OTP Credential Update Modal */}
       {updateModalType && (

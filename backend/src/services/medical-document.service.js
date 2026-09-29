@@ -239,7 +239,10 @@ class MedicalDocumentService {
       // Check for ACTIVE non-expired HealthPackShare for patient owning this doc
       const activeShare = await prisma.healthPackShare.findFirst({
         where: {
-          sharedWithHospitalId: hospital.id,
+          OR: [
+            { sharedWithHospitalId: hospital.id },
+            { sharedWithUserId: requestingUser.userId || requestingUser.id || '' },
+          ],
           healthPack: { patientId: doc.patientId },
           status: 'ACTIVE',
           consentGranted: true,
@@ -247,18 +250,40 @@ class MedicalDocumentService {
         },
       });
 
-      // Check for assigned / requested emergency case for this hospital & patient
-      const assignedCase = await prisma.emergencyCase.findFirst({
+      // Check for assigned / requested active emergency case for this hospital & patient
+      let assignedCase = await prisma.emergencyCase.findFirst({
         where: {
           hospitalId: hospital.id,
           patientId: doc.patientId,
-          status: { in: ['PENDING', 'MATCHING', 'HOSPITAL_REQUESTED', 'ACCEPTED', 'IN_PROGRESS', 'CLOSED'] },
+          status: { in: ['PENDING', 'MATCHING', 'HOSPITAL_REQUESTED', 'ACCEPTED', 'TRANSFER', 'TREATMENT', 'IN_PROGRESS'] },
         },
       });
+
+      if (!assignedCase) {
+        const reqCase = await prisma.hospitalRequest.findFirst({
+          where: {
+            hospitalId: hospital.id,
+            emergencyCase: { patientId: doc.patientId, status: { notIn: ['CLOSED', 'CANCELLED'] } },
+            status: { in: ['ACCEPTED', 'PENDING'] },
+          },
+        });
+        if (reqCase) assignedCase = reqCase;
+      }
 
       if (!activeShare && !assignedCase) {
         throw new Error('Access denied: HealthPack access expired or hospital not authorized for this patient.');
       }
+
+      // Enforce server-side 24-hour access window for assigned cases when activeShare is missing/expired
+      if (assignedCase && !activeShare) {
+        const caseCreated = new Date(assignedCase.createdAt || Date.now());
+        const hoursElapsed = (Date.now() - caseCreated.getTime()) / (1000 * 60 * 60);
+        if (hoursElapsed >= 24) {
+          throw new Error('Access denied: HealthPack 24-hour access window has expired.');
+        }
+      }
+    } else if (requestingUser.role === 'ADMIN') {
+      // Admin bypass for support/audit purposes
     } else {
       throw new Error('Access denied: Invalid role.');
     }
@@ -273,6 +298,21 @@ class MedicalDocumentService {
 
     if (!fs.existsSync(fullPath)) {
       throw new Error('File not found on disk.');
+    }
+
+    // Write audit log for document access
+    try {
+      await prisma.auditLog.create({
+        data: {
+          userId: requestingUser.userId || requestingUser.id,
+          action: 'HEALTH_PACK_VIEWED',
+          entity: 'MedicalDocument',
+          entityId: doc.id,
+          details: { event: 'DOCUMENT_VIEWED', fileName: doc.fileName, patientId: doc.patientId },
+        },
+      });
+    } catch (auditErr) {
+      console.warn('[MedicalDocumentService] Audit log warning:', auditErr.message);
     }
 
     return {

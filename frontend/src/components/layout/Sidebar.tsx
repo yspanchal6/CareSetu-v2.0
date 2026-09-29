@@ -1,12 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { LucideIcon, HeartPulse, ShieldAlert, Lock } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { useHospitalSecurity } from "../../context/HospitalSecurityContext";
+import { useTranslation } from "../../i18n";
+import { accountDeletionApi } from "../../services/api";
 import Button from "../common/Button";
 
 export interface NavItem {
   to: string;
   label: string;
+  key?: string;
   icon: LucideIcon;
 }
 
@@ -27,8 +31,41 @@ export default function Sidebar({ items, roleLabel }: { items: NavItem[]; roleLa
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { status: securityStatus } = useHospitalSecurity();
+  const { t } = useTranslation();
   const [showRestrictionModal, setShowRestrictionModal] = useState(false);
   const [restrictedFeatureName, setRestrictedFeatureName] = useState("");
+  const [pendingDeletionsCount, setPendingDeletionsCount] = useState<number>(0);
+
+  const isHospital = user?.role === 'hospital' || (user?.role as string)?.toUpperCase() === 'HOSPITAL';
+  const isBlocked = isHospital && (securityStatus === 'TEMPORARILY_BLOCKED' || securityStatus === 'UNDER_REVIEW');
+  const isAdmin = Boolean(user && user.role && user.role.toLowerCase() === "admin");
+
+  useEffect(() => {
+    if (isAdmin) {
+      let isMounted = true;
+      const fetchPendingCount = async () => {
+        try {
+          const res = await accountDeletionApi.getAdminDeletionRequests();
+          if (res.success && isMounted) {
+            const count = (res.requests || []).filter(
+              (r: any) => r.status === "PENDING" && (r.role === "HOSPITAL" || r.role === "DOCTOR")
+            ).length;
+            setPendingDeletionsCount(count);
+          }
+        } catch {
+          // Ignore polling errors silently
+        }
+      };
+
+      fetchPendingCount();
+      const interval = setInterval(fetchPendingCount, 15000);
+      return () => {
+        isMounted = false;
+        clearInterval(interval);
+      };
+    }
+  }, [isAdmin, location.pathname]);
 
   const isGuest = user?.isGuest || user?.role === "guest";
   const isAllowedGuestPath = (to: string) => {
@@ -36,9 +73,13 @@ export default function Sidebar({ items, roleLabel }: { items: NavItem[]; roleLa
   };
 
   const handleNavClick = (e: React.MouseEvent, item: NavItem) => {
+    if (isBlocked) {
+      e.preventDefault();
+      return;
+    }
     if (isGuest && !isAllowedGuestPath(item.to)) {
       e.preventDefault();
-      setRestrictedFeatureName(item.label);
+      setRestrictedFeatureName(item.key ? t(item.key) : item.label);
       setShowRestrictionModal(true);
     }
   };
@@ -58,7 +99,7 @@ export default function Sidebar({ items, roleLabel }: { items: NavItem[]; roleLa
           </div>
           {isGuest && (
             <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30">
-              <ShieldAlert className="w-3 h-3" /> Guest
+              <ShieldAlert className="w-3 h-3" /> {t("common.guestMode")}
             </span>
           )}
         </div>
@@ -66,20 +107,35 @@ export default function Sidebar({ items, roleLabel }: { items: NavItem[]; roleLa
           {items.map((item) => {
             const active = isItemActive(location.pathname, item.to, items);
             const restricted = isGuest && !isAllowedGuestPath(item.to);
+            const isDeletionsNav = item.to === "/admin/deletions";
+            const displayLabel = item.key ? t(item.key) : item.label;
 
             return (
               <NavLink
                 key={item.to}
                 to={item.to}
                 onClick={(e) => handleNavClick(e, item)}
-                className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                  active ? "bg-sky text-navy" : restricted ? "text-white/40 hover:bg-white/5" : "text-white/70 hover:bg-white/5 hover:text-white"
+                className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ease-in-out ${
+                  active
+                    ? "bg-sky text-navy font-bold shadow-xs"
+                    : restricted
+                    ? "text-white/40 hover:bg-white/5"
+                    : "text-white/70 hover:bg-white/10 hover:text-white"
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <item.icon className="w-4.5 h-4.5 shrink-0" />
-                  {item.label}
+                  {displayLabel}
                 </div>
+                {isDeletionsNav && pendingDeletionsCount > 0 && (
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[11px] font-extrabold transition-colors duration-200 ${
+                      active ? "bg-navy text-sky" : "bg-amber-400 text-navy shadow-xs animate-pulse"
+                    }`}
+                  >
+                    {pendingDeletionsCount}
+                  </span>
+                )}
                 {restricted && <Lock className="w-3.5 h-3.5 opacity-50" />}
               </NavLink>
             );

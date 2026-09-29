@@ -6,6 +6,7 @@ const {
   getMyDocuments,
   deleteDocument,
   downloadDocument,
+  viewDocument,
 } = require('../controllers/medical-document.controller');
 const { auth, authorize, denyGuest } = require('../middleware/auth.middleware');
 
@@ -46,9 +47,10 @@ router.use(auth, denyGuest);
 
 router.post('/', authorize('PATIENT'), handleMulterUpload, uploadDocument);
 router.get('/my-documents', authorize('PATIENT'), getMyDocuments);
+router.get('/:documentId/view', auth, authorize('PATIENT', 'HOSPITAL'), viewDocument);
 router.get('/:documentId/download', auth, authorize('PATIENT', 'HOSPITAL'), downloadDocument);
 router.get('/download/:documentId', auth, authorize('PATIENT', 'HOSPITAL'), downloadDocument);
 router.get('/:documentId', auth, authorize('PATIENT', 'HOSPITAL'), downloadDocument);
-router.delete('/:documentId', auth, authorize('PATIENT'), deleteDocument);
+router.delete('/:documentId', authorize('PATIENT'), deleteDocument);
 
 module.exports = router;

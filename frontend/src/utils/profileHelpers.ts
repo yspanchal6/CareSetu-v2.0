@@ -14,7 +14,7 @@ export function isPatientProfileComplete(user?: User | null, patientData?: any):
     return Boolean(user.isVerified);
   }
 
-  if (user.isProfileComplete === true || user.isVerified === true) {
+  if (user.isProfileComplete === true) {
     return true;
   }
 

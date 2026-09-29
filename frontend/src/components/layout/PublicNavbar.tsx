@@ -2,21 +2,24 @@ import { useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Menu, X, HeartPulse } from "lucide-react";
 import Button from "../common/Button";
+import LanguageSelector from "../common/LanguageSelector";
 import { useAuth } from "../../context/AuthContext";
-
-const links = [
-  { to: "/", label: "Home" },
-  { to: "/how-it-works", label: "How It Works" },
-  { to: "/features", label: "Features" },
-  { to: "/about", label: "About" },
-  { to: "/contact", label: "Contact" },
-];
+import { useTranslation } from "../../i18n/I18nContext";
 
 export default function PublicNavbar() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const { isAuthenticated, startGuestSession } = useAuth();
+  const { t } = useTranslation();
   const [loadingEmergency, setLoadingEmergency] = useState(false);
+
+  const navLinks = [
+    { to: "/", label: t("nav.home") },
+    { to: "/how-it-works", label: t("nav.howItWorks") },
+    { to: "/features", label: t("nav.features") },
+    { to: "/about", label: t("nav.about") },
+    { to: "/contact", label: t("nav.contact") },
+  ];
 
   const handleEmergencyClick = async () => {
     if (loadingEmergency) return;
@@ -45,7 +48,7 @@ export default function PublicNavbar() {
         </Link>
 
         <nav className="hidden md:flex items-center gap-1">
-          {links.map((l) => (
+          {navLinks.map((l) => (
             <NavLink
               key={l.to}
               to={l.to}
@@ -61,22 +64,26 @@ export default function PublicNavbar() {
         </nav>
 
         <div className="hidden md:flex items-center gap-2">
+          <LanguageSelector variant="compact" />
           <Button variant="ghost" size="sm" onClick={() => navigate("/login")}>
-            Log in
+            {t("auth.login")}
           </Button>
           <Button variant="danger" size="sm" onClick={handleEmergencyClick} disabled={loadingEmergency}>
-            {loadingEmergency ? "Connecting..." : "Report Emergency"}
+            {loadingEmergency ? t("common.connecting") : t("emergency.reportEmergency")}
           </Button>
         </div>
 
-        <button className="md:hidden p-2" onClick={() => setOpen(!open)} aria-label="Toggle menu">
-          {open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
+        <div className="flex md:hidden items-center gap-2">
+          <LanguageSelector variant="compact" />
+          <button className="p-2" onClick={() => setOpen(!open)} aria-label="Toggle menu">
+            {open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
       </div>
 
       {open && (
         <div className="md:hidden border-t border-slate-100 bg-white px-5 py-4 flex flex-col gap-1">
-          {links.map((l) => (
+          {navLinks.map((l) => (
             <NavLink
               key={l.to}
               to={l.to}
@@ -86,12 +93,12 @@ export default function PublicNavbar() {
               {l.label}
             </NavLink>
           ))}
-          <div className="flex gap-2 mt-3">
+          <div className="flex flex-col gap-2 mt-3">
             <Button variant="outline" size="sm" fullWidth onClick={() => navigate("/login")}>
-              Log in
+              {t("auth.login")}
             </Button>
             <Button variant="danger" size="sm" fullWidth onClick={handleEmergencyClick} disabled={loadingEmergency}>
-              {loadingEmergency ? "Connecting..." : "Report Emergency"}
+              {loadingEmergency ? t("common.connecting") : t("emergency.reportEmergency")}
             </Button>
           </div>
         </div>

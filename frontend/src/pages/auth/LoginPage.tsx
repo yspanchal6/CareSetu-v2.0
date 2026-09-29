@@ -8,8 +8,10 @@ import { useToast } from "../../components/common/Toast";
 import { OtpInput } from "../../components/common/OtpInput";
 import { authApi } from "../../services/api";
 import GoogleAuthButton, { GoogleDivider } from "../../components/common/GoogleAuthButton";
+import { useTranslation } from "../../i18n/I18nContext";
 
 export default function LoginPage() {
+  const { t } = useTranslation();
   const [loginMethod, setLoginMethod] = useState<"password" | "otp">("password");
   const [step, setStep] = useState<"form" | "otp_verify">("form");
   const [email, setEmail] = useState("patient@test.com");
@@ -255,7 +257,7 @@ export default function LoginPage() {
 
       {loginMethod === "password" ? (
         <form onSubmit={handleLogin} className="flex flex-col gap-4">
-          <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required />
+          <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required autoComplete="username" />
           <PasswordInput
             label="Password"
             value={password}
@@ -265,6 +267,7 @@ export default function LoginPage() {
             showStrengthIndicator={false}
             showChecklist={false}
             isShake={isShake}
+            autoComplete="current-password"
           />
           <div className="flex justify-end -mt-1">
             <Link to="/forgot-password" className="text-xs font-semibold text-sky hover:underline">

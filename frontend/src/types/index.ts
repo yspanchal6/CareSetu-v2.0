@@ -11,6 +11,9 @@ export interface User {
   verificationStatus?: string;
   isGuest?: boolean;
   patient?: any;
+  hospitalSecurityStatus?: string;
+  currentViolationCount?: number;
+  securityEpoch?: number;
 }
 
 

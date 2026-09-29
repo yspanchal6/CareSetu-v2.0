@@ -1,17 +1,27 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { User, Phone, MapPin, Heart, AlertCircle, Save, ArrowRight, ArrowLeft, CheckCircle2, ShieldCheck, X } from "lucide-react";
+import { User, Phone, MapPin, Heart, AlertCircle, Save, ArrowRight, ArrowLeft, CheckCircle2, ShieldCheck, X, UploadCloud, FileText, Image as ImageIcon, Sparkles } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../components/common/Toast";
 import { Input, Select } from "../../components/common/Input";
 import Button from "../../components/common/Button";
 import { UnsavedChangesModal } from "../../components/common/UnsavedChangesModal";
-import { getAuthToken, patientApi } from "../../services/api";
+import { getAuthToken, patientApi, medicalDocumentApi } from "../../services/api";
+
+interface UploadedDocItem {
+  id: string;
+  name: string;
+  size: string;
+  type: string;
+  status: "uploading" | "done";
+  suggestions?: string[];
+}
 
 export default function PatientProfileCompletionPage() {
   const { user, setSession, updateUser, refreshUser } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [name, setName] = useState(user?.name || "");
   const [age, setAge] = useState("");
@@ -29,13 +39,18 @@ export default function PatientProfileCompletionPage() {
   const [emergencyPhone, setEmergencyPhone] = useState("");
   const [emergencyRelation, setEmergencyRelation] = useState("Family");
 
+  // Optional Documents
+  const [uploadedDocs, setUploadedDocs] = useState<UploadedDocItem[]>([]);
+  const [docType, setDocType] = useState("LAB_REPORT");
+  const [dragOver, setDragOver] = useState(false);
+
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isDirty, setIsDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
   const [pendingTarget, setPendingTarget] = useState<string | null>(null);
 
-  // Load existing profile if available
+  // Load existing profile & documents if available
   useEffect(() => {
     patientApi.getProfile().then((res) => {
       if (res.success && res.patient) {
@@ -56,10 +71,97 @@ export default function PatientProfileCompletionPage() {
           setEmergencyRelation(contact.relation || "Family");
         }
       }
-    }).catch(() => {
-      // Ignore background load error if fresh account
-    });
+    }).catch(() => {});
+
+    medicalDocumentApi.getMyDocuments().then((res) => {
+      if (res.success && Array.isArray(res.data)) {
+        const fetched = res.data.map((d: any) => ({
+          id: d.id,
+          name: d.fileName,
+          size: d.fileSize ? `${(d.fileSize / 1024).toFixed(0)} KB` : "N/A",
+          type: d.fileType === "IMAGE" ? "image" : "pdf",
+          status: "done" as const,
+          suggestions: d.extractedConditions ? d.extractedConditions.split(", ") : [],
+        }));
+        setUploadedDocs(fetched);
+      }
+    }).catch(() => {});
   }, []);
+
+  const handleFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    const ALLOWED_EXTENSIONS = [".pdf", ".jpg", ".jpeg", ".png"];
+    const ALLOWED_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/jpg"];
+    const MAX_SIZE = 10 * 1024 * 1024;
+
+    for (const file of Array.from(files)) {
+      const ext = "." + (file.name.split(".").pop() || "").toLowerCase();
+      const isExtensionValid = ALLOWED_EXTENSIONS.includes(ext);
+      const isMimeValid = !file.type || ALLOWED_MIME_TYPES.includes(file.type.toLowerCase());
+
+      if (!isExtensionValid || !isMimeValid) {
+        showToast("error", `Invalid file format for "${file.name}". Allowed: PDF, JPG, PNG.`);
+        continue;
+      }
+
+      if (file.size > MAX_SIZE) {
+        showToast("error", `File "${file.name}" exceeds maximum allowed limit of 10MB.`);
+        continue;
+      }
+
+      const tempId = `temp-${Date.now()}-${Math.random()}`;
+      const isImage = file.type.startsWith("image/") || ext === ".jpg" || ext === ".jpeg" || ext === ".png";
+      const newDoc: UploadedDocItem = {
+        id: tempId,
+        name: file.name,
+        size: `${(file.size / 1024).toFixed(0)} KB`,
+        type: isImage ? "image" : "pdf",
+        status: "uploading",
+      };
+      setUploadedDocs((prev) => [newDoc, ...prev]);
+
+      try {
+        const res = await medicalDocumentApi.upload(file, docType);
+        if (res.success) {
+          const suggestions = res.suggestedConditions || [];
+          setUploadedDocs((prev) =>
+            prev.map((d) =>
+              d.id === tempId
+                ? {
+                    id: res.data.id,
+                    name: res.data.fileName,
+                    size: `${(res.data.fileSize / 1024).toFixed(0)} KB`,
+                    type: isImage ? "image" : "pdf",
+                    status: "done",
+                    suggestions,
+                  }
+                : d
+            )
+          );
+          showToast("success", `${file.name} uploaded to your Health Pack.`);
+        } else {
+          setUploadedDocs((prev) => prev.filter((d) => d.id !== tempId));
+          showToast("error", res.error || "Failed to upload document.");
+        }
+      } catch (err: any) {
+        setUploadedDocs((prev) => prev.filter((d) => d.id !== tempId));
+        showToast("error", err.message || "Upload error.");
+      }
+    }
+  };
+
+  const handleDeleteDoc = async (id: string) => {
+    try {
+      const res = await medicalDocumentApi.delete(id);
+      if (res.success) {
+        setUploadedDocs((prev) => prev.filter((d) => d.id !== id));
+        showToast("info", "Document removed.");
+      }
+    } catch (err) {
+      showToast("error", "Could not delete document.");
+    }
+  };
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
@@ -110,18 +212,23 @@ export default function PatientProfileCompletionPage() {
         showToast("success", isFinalSubmit ? "Patient profile completed successfully!" : "Profile draft saved.");
         setIsDirty(false);
 
+        const isComplete = Boolean(res.user?.isProfileComplete) || (isFinalSubmit && Boolean(
+          name.trim().length >= 2 &&
+          Number(age) > 0 &&
+          gender &&
+          gender.toUpperCase() !== "UNSPECIFIED"
+        ));
+
         if (res.user) {
           updateUser({
             ...res.user,
             patient: res.patient || res.user.patient,
-            isVerified: res.user.isVerified ?? true,
-            isProfileComplete: true,
+            isProfileComplete: isComplete,
           });
         } else if (res.patient) {
           updateUser({
             patient: res.patient,
-            isVerified: true,
-            isProfileComplete: true,
+            isProfileComplete: isComplete,
           });
         }
         await refreshUser();
@@ -140,7 +247,7 @@ export default function PatientProfileCompletionPage() {
   const handleSaveAndContinue = async () => {
     const success = await saveProfileData(true);
     if (success) {
-      navigate("/patient/dashboard");
+      navigate("/patient/dashboard", { state: { profileJustCompleted: true } });
     }
   };
 
@@ -379,6 +486,105 @@ export default function PatientProfileCompletionPage() {
                 />
               </div>
             </div>
+          </div>
+
+          {/* Section 4: Optional Document Upload */}
+          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/80 shadow-sm space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <UploadCloud className="w-5 h-5 text-sky" />
+                <h2 className="font-bold text-navy text-base">4. Upload Medical Documents (Optional)</h2>
+              </div>
+              <span className="text-xs text-slate-500 font-semibold bg-slate-100 px-2.5 py-0.5 rounded-full">Optional</span>
+            </div>
+
+            <p className="text-xs text-text-secondary leading-relaxed">
+              Attach medical reports, prescriptions, or discharge summaries to enrich your encrypted Health Pack. You can complete your profile without uploading documents and add them anytime later.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+              <label className="text-xs font-bold text-navy shrink-0">Document Type:</label>
+              <Select
+                value={docType}
+                onChange={(e) => setDocType(e.target.value)}
+                className="text-xs py-1.5"
+              >
+                <option value="LAB_REPORT">Blood / Lab Report</option>
+                <option value="PRESCRIPTION">Prescription</option>
+                <option value="DISCHARGE_SUMMARY">Discharge Summary</option>
+                <option value="DIAGNOSIS_REPORT">Diagnosis Report</option>
+                <option value="OTHER">Other Medical Document</option>
+              </Select>
+            </div>
+
+            <div
+              className={`border-2 border-dashed rounded-xl p-5 text-center transition-colors ${
+                dragOver ? "border-sky bg-paleblue" : "border-slate-200 hover:border-sky/50"
+              }`}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                handleFiles(e.dataTransfer.files);
+              }}
+            >
+              <UploadCloud className="w-7 h-7 text-sky mx-auto mb-2" />
+              <p className="font-semibold text-navy text-xs sm:text-sm">Drag & drop files here or browse</p>
+              <p className="text-[11px] text-text-secondary mt-1 mb-3">Allowed: PDF, JPG, PNG | Max size: 10 MB</p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                className="hidden"
+                onChange={(e) => handleFiles(e.target.files)}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                className="text-xs"
+              >
+                Select Files
+              </Button>
+            </div>
+
+            {uploadedDocs.length > 0 && (
+              <div className="space-y-2 pt-2">
+                <p className="text-xs font-bold text-navy">Uploaded Documents ({uploadedDocs.length})</p>
+                <div className="space-y-2">
+                  {uploadedDocs.map((doc) => (
+                    <div key={doc.id} className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200/80 text-xs">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        {doc.type === "image" ? <ImageIcon className="w-4 h-4 text-sky shrink-0" /> : <FileText className="w-4 h-4 text-sky shrink-0" />}
+                        <div className="min-w-0">
+                          <p className="font-semibold text-navy truncate">{doc.name}</p>
+                          <p className="text-[10px] text-slate-500">{doc.size}</p>
+                        </div>
+                      </div>
+                      {doc.status === "uploading" ? (
+                        <span className="text-sky animate-pulse font-medium">Uploading...</span>
+                      ) : (
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-emerald-600 font-medium flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Saved
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteDoc(doc.id)}
+                            className="text-slate-400 hover:text-rose-500 transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Action Footer */}

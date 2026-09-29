@@ -424,6 +424,7 @@ async function runHealthPackDataFlowTests() {
       trackedAuditUsers.push(hospital.user.id);
 
       const emergencyCase = await createCase(patient.id, hospital.hospital.id);
+      await prisma.emergencyCase.update({ where: { id: emergencyCase.id }, data: { status: 'CLOSED' } });
       createdCases.push(emergencyCase.id);
 
       await healthPackService.createHealthPack(patient.id, { bloodGroup: 'A+' });

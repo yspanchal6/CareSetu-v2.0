@@ -6,6 +6,7 @@ import { Card } from "../../components/common/Card";
 import Badge from "../../components/common/Badge";
 import { EmptyState, ErrorState } from "../../components/common/States";
 import StatusTracker from "../../components/emergency/StatusTracker";
+import { useTranslation } from "../../i18n/I18nContext";
 
 const severityTone = { 
   Critical: "critical", CRITICAL: "critical",
@@ -14,6 +15,7 @@ const severityTone = {
 } as const;
 
 export function PatientCasesPage() {
+  const { t } = useTranslation();
   const [cases, setCases] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -31,10 +33,10 @@ export function PatientCasesPage() {
     load();
   }, []);
 
-  if (loading) return <div className="p-4 text-sm text-text-secondary">Loading cases...</div>;
+  if (loading) return <div className="p-4 text-sm text-text-secondary">{t("common.loading")}</div>;
 
   if (cases.length === 0) {
-    return <EmptyState icon={ClipboardList} title="No cases yet" message="Your emergency case history will appear here." />;
+    return <EmptyState icon={ClipboardList} title={t("myCases.noCases")} message="" />;
   }
 
   return (

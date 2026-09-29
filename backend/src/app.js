@@ -20,6 +20,10 @@ const documentVerificationRoutes = require('./routes/document-verification.route
 const geocodingRoutes = require('./routes/geocoding.routes');
 const settingsRoutes = require('./routes/settings.routes');
 const patientRoutes = require('./routes/patient.routes');
+const accountDeletionRoutes = require('./routes/account-deletion.routes');
+const govHealthDataRoutes = require('./routes/gov-health-data.routes');
+const hospitalMatchingRoutes = require('./routes/hospital-matching.routes');
+const hospitalSecurityRoutes = require('./routes/hospital-security.routes');
 
 const app = express();
 
@@ -34,6 +38,7 @@ app.use(helmetConfig);
 const allowedOrigins = [
   'http://localhost:5173',
   process.env.FRONTEND_URL,
+  ...(process.env.CORS_ORIGINS || '').split(',').map((origin) => origin.trim()),
 ].filter(Boolean);
 
 app.use(cors({
@@ -41,7 +46,7 @@ app.use(cors({
     if (!origin || allowedOrigins.includes(origin) || /\.trycloudflare\.com$/.test(origin)) {
       callback(null, true);
     } else {
-      callback(null, true); // Allow during dev/testing
+      callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
@@ -66,17 +71,23 @@ app.use('/api/emergency', emergencyRoutes);
 app.use('/api/hospitals', hospitalRoutes);
 app.use('/api/doctors', doctorRoutes);
 app.use('/api/admin', adminLimiter, adminRoutes);
+app.use('/api/admin/gov-health-data', adminLimiter, govHealthDataRoutes);
+app.use('/api/admin/hospital-matching', adminLimiter, hospitalMatchingRoutes);
+app.use('/api/account-deletion', accountDeletionRoutes);
+app.use('/api/account-deletions', accountDeletionRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/patient/documents', docDownloadLimiter, medicalDocumentRoutes);
+app.use('/api/documents', docDownloadLimiter, medicalDocumentRoutes);
+app.use('/api/medical-documents', docDownloadLimiter, medicalDocumentRoutes);
 app.use('/api/patient', patientRoutes);
 app.use('/api/patients', patientRoutes);
 app.use('/api/health-pack', healthPackRoutes);
 app.use('/api/healthpack', healthPackRoutes);
-app.use('/api/patient/documents', docDownloadLimiter, medicalDocumentRoutes);
-app.use('/api/documents', docDownloadLimiter, medicalDocumentRoutes);
-app.use('/api/medical-documents', docDownloadLimiter, medicalDocumentRoutes);
 app.use('/api/fcm', fcmRoutes);
 app.use('/api/chat', aiChatLimiter, chatRoutes);
 app.use('/api/geocoding', geocodingRoutes);
+app.use('/api/security', hospitalSecurityRoutes);
+app.use('/api/hospital', hospitalSecurityRoutes);
 
 // Comprehensive Deep Health Check Endpoint
 app.get(['/health', '/api/health'], async (req, res) => {

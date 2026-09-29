@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const prisma = require('../config/prisma');
 
-const authMiddleware = (req, res, next) => {
+const authMiddleware = async (req, res, next) => {
   try {
     let token = null;
 
@@ -36,6 +36,61 @@ const authMiddleware = (req, res, next) => {
     if (req.user && !req.user.userId && req.user.id) {
       req.user.userId = req.user.id;
     }
+
+    const userId = req.user.userId || req.user.id;
+    const isGuest = Boolean(req.user.isGuest || req.user.isGuestSession || req.user.role === 'guest' || req.user.role === 'GUEST');
+
+    if (userId && !isGuest) {
+      const dbUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, role: true, status: true },
+      });
+
+      if (!dbUser) {
+        return res.status(401).json({
+          error: 'Your CareSetu account has been permanently terminated.',
+          code: 'ACCOUNT_TERMINATED',
+          terminated: true,
+        });
+      }
+
+      const isSecurityPath = (req.baseUrl && req.baseUrl.startsWith('/api/security')) || (req.originalUrl && (req.originalUrl.includes('/api/security') || req.originalUrl.includes('/api/hospital/security-status')));
+      const isMePath = (req.baseUrl === '/api/auth' && (req.path === '/me' || req.path === '/logout')) || (req.originalUrl && (req.originalUrl.includes('/api/auth/me') || req.originalUrl.includes('/api/auth/logout')));
+
+      if (dbUser.role === 'HOSPITAL') {
+        const hospital = await prisma.hospital.findUnique({
+          where: { userId: dbUser.id },
+          include: { securityStatus: true }
+        });
+        const secStatus = hospital?.securityStatus;
+
+        if ((secStatus && (secStatus.status === 'TEMPORARILY_BLOCKED' || secStatus.status === 'UNDER_REVIEW' || secStatus.currentViolationCount >= 3)) || dbUser.status === 'BLOCKED') {
+          if (!isSecurityPath && !isMePath) {
+            return res.status(403).json({
+              error: 'HOSPITAL_PORTAL_RESTRICTED',
+              status: secStatus?.status || 'TEMPORARILY_BLOCKED',
+              reason: 'PROTECTED_MEDICAL_CONTENT_CAPTURE_VIOLATION',
+              currentViolationCount: secStatus?.currentViolationCount || 3,
+              maxAttempts: 3,
+              securityEpoch: secStatus?.securityEpoch || 1,
+              blockedAt: secStatus?.blockedAt || secStatus?.updatedAt || new Date(),
+              message: 'Your CareSetu hospital portal has been temporarily restricted because protected CareSetu medical content was captured.'
+            });
+          }
+        }
+      } else if (dbUser.status === 'BLOCKED' || dbUser.status === 'INACTIVE') {
+        if (!isSecurityPath && !isMePath) {
+          return res.status(403).json({
+            error: `Account is ${dbUser.status.toLowerCase()}. Access denied.`,
+            code: 'ACCOUNT_DISABLED',
+            status: 'TEMPORARILY_BLOCKED',
+          });
+        }
+      }
+
+      req.user.role = dbUser.role;
+    }
+
     if (req.path === '/sos' && req.baseUrl === '/api/emergency') {
       console.info('[API Auth Diagnostic]', {
         userId: req.user.userId || req.user.id || null,
@@ -75,7 +130,20 @@ const requireRole = (...roles) => {
         return res.status(401).json({ error: 'Authenticated user no longer exists.' });
       }
       if (dbUser.status !== 'ACTIVE') {
-        return res.status(403).json({ error: 'Account is not active.' });
+        const isSecurityPath = (req.baseUrl && req.baseUrl.startsWith('/api/security')) || (req.originalUrl && (req.originalUrl.includes('/api/security') || req.originalUrl.includes('/api/auth/me')));
+        if (dbUser.role === 'HOSPITAL' && isSecurityPath) {
+          userRole = 'HOSPITAL';
+          req.user.role = 'HOSPITAL';
+          return next();
+        }
+        return res.status(403).json({
+          error: 'HOSPITAL_PORTAL_RESTRICTED',
+          status: 'TEMPORARILY_BLOCKED',
+          reason: 'PROTECTED_MEDICAL_CONTENT_CAPTURE_VIOLATION',
+          currentViolationCount: 3,
+          maxAttempts: 3,
+          message: 'Account is not active. Access denied.'
+        });
       }
       if (isGuestSession && (allowedRoles.includes('GUEST') || allowedRoles.includes('PATIENT'))) {
         req.user.role = 'GUEST';

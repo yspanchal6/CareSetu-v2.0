@@ -4,6 +4,7 @@ import { Card } from "../../components/common/Card";
 import { Input } from "../../components/common/Input";
 import Button from "../../components/common/Button";
 import { useToast } from "../../components/common/Toast";
+import { useTranslation } from "../../i18n";
 
 const featureList = [
   { icon: Users, title: "User Management", desc: "Role-based accounts for patients, hospitals, doctors, and admins with tailored onboarding." },
@@ -65,6 +66,7 @@ export function AboutPage() {
 }
 
 export function ContactPage() {
+  const { t } = useTranslation();
   const { showToast } = useToast();
   const [submitted, setSubmitted] = useState(false);
   const [queuedOffline, setQueuedOffline] = useState(false);
@@ -100,57 +102,57 @@ export function ContactPage() {
         });
 
         setQueuedOffline(true);
-        showToast("info", "Your support request is saved locally and will submit automatically when online.");
+        showToast("info", t("contact.offlineNotice"));
       } catch (err) {
         console.error("Failed to queue offline contact request:", err);
         showToast("error", "Failed to save offline support request.");
       }
     } else {
       setSubmitted(true);
-      showToast("success", "Your message has been sent to CareSetu Support.");
+      showToast("success", t("contact.sentNotice"));
     }
   };
 
   return (
     <div className="max-w-xl mx-auto px-5 sm:px-8 py-16">
-      <h1 className="text-3xl font-extrabold text-navy mb-2">Healthcare support</h1>
-      <p className="text-text-secondary mb-8">Questions about onboarding your hospital or the CareSetu platform? Send us a message.</p>
+      <h1 className="text-3xl font-extrabold text-navy mb-2">{t("contact.title")}</h1>
+      <p className="text-text-secondary mb-8">{t("contact.subtitle")}</p>
 
       <Card>
         {queuedOffline ? (
           <div className="text-center py-6">
             <Wifi className="w-8 h-8 text-amber-500 mx-auto mb-3" />
-            <p className="font-bold text-navy">Saved Locally (Offline Mode)</p>
+            <p className="font-bold text-navy">{t("contact.offlineSaved")}</p>
             <p className="text-sm text-text-secondary mt-1">
-              Your support request is saved and will be submitted when you're online.
+              {t("contact.offlineNotice")}
             </p>
           </div>
         ) : submitted ? (
           <div className="text-center py-6">
             <ShieldCheck className="w-8 h-8 text-success mx-auto mb-3" />
-            <p className="font-bold text-navy">Message sent</p>
-            <p className="text-sm text-text-secondary mt-1">Our team will reach out within one business day.</p>
+            <p className="font-bold text-navy">{t("contact.messageSent")}</p>
+            <p className="text-sm text-text-secondary mt-1">{t("contact.sentNotice")}</p>
           </div>
         ) : (
           <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Input
-                label="First name"
-                placeholder="First name"
+                label={t("contact.firstName")}
+                placeholder={t("contact.firstName")}
                 required
                 value={form.firstName}
                 onChange={(e) => setForm({ ...form, firstName: e.target.value })}
               />
               <Input
-                label="Last name"
-                placeholder="Last name"
+                label={t("contact.lastName")}
+                placeholder={t("contact.lastName")}
                 required
                 value={form.lastName}
                 onChange={(e) => setForm({ ...form, lastName: e.target.value })}
               />
             </div>
             <Input
-              label="Email"
+              label={t("contact.email")}
               type="email"
               placeholder="you@example.com"
               required
@@ -158,18 +160,18 @@ export function ContactPage() {
               onChange={(e) => setForm({ ...form, email: e.target.value })}
             />
             <div>
-              <label className="block text-sm font-semibold text-navy mb-1.5">Message</label>
+              <label className="block text-sm font-semibold text-navy mb-1.5">{t("contact.message")}</label>
               <textarea
                 required
                 rows={4}
-                placeholder="How can we help?"
+                placeholder={t("contact.messagePlaceholder")}
                 value={form.message}
                 onChange={(e) => setForm({ ...form, message: e.target.value })}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-sky/30 focus:border-sky outline-none"
               />
             </div>
             <Button type="submit" variant="primary" fullWidth>
-              Send message
+              {t("contact.sendMessage")}
             </Button>
           </form>
         )}
@@ -179,6 +181,7 @@ export function ContactPage() {
 }
 
 export function HelpPage() {
+  const { t } = useTranslation();
   const [faqs, setFaqs] = useState<Array<{ id: string; category: string; question: string; answer: string; version: string }>>([
     {
       id: "faq-1",
@@ -243,15 +246,15 @@ export function HelpPage() {
 
   return (
     <div className="max-w-3xl mx-auto px-5 sm:px-8 py-16">
-      <h1 className="text-3xl font-extrabold text-navy mb-2">CareSetu Help Center & FAQs</h1>
+      <h1 className="text-3xl font-extrabold text-navy mb-2">{t("help.title")}</h1>
       <p className="text-text-secondary mb-6">
-        {isOffline ? "Offline Mode: Showing cached emergency & app usage FAQs." : "Frequently asked questions and emergency guidance."}
+        {isOffline ? t("help.offlineNotice") : t("help.subtitle")}
       </p>
 
       {isOffline && (
         <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-900 flex items-center gap-2.5">
           <Wifi className="w-4 h-4 text-amber-600 shrink-0" />
-          <span>Showing cached help content. Connect to the internet to get live updates.</span>
+          <span>{t("help.offlineBanner")}</span>
         </div>
       )}
 

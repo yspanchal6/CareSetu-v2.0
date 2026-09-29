@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { BrainCircuit, Send, ArrowLeft, Paperclip, AlertTriangle, Siren, Mic, MicOff, RefreshCw, ShieldCheck } from "lucide-react";
+import { BrainCircuit, Send, ArrowLeft, Paperclip, AlertTriangle, Siren, Mic, MicOff, RefreshCw, ShieldCheck, Sparkles } from "lucide-react";
 import { Card } from "../../components/common/Card";
 import Button from "../../components/common/Button";
 import { useAuth } from "../../context/AuthContext";
 import { chatApi, emergencyApi } from "../../services/api";
+import { useTranslation } from "../../i18n/I18nContext";
 
 interface ChatMessage {
   id: number;
@@ -23,8 +24,9 @@ const starterPrompts = [
 export default function DoctorAIPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: 1, from: "ai", text: `Hi ${user?.name?.split(" ")[0] ?? "there"}, I'm CareSetu Doctor AI. Describe your symptoms or ask a health question, and I'll help you understand next steps. I am an AI assistant, not a doctor — for urgent emergencies, use Report Emergency.` },
+    { id: 1, from: "ai", text: `${t("doctorAi.title")}: ${t("doctorAi.disclaimer")}` },
   ]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
@@ -168,7 +170,6 @@ export default function DoctorAIPage() {
   const send = async (text: string) => {
     if (!text.trim() || thinking) return;
 
-    // Check if device is offline before attempting API call
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       const offlineMsg: ChatMessage = {
         id: nextIdRef.current++,
@@ -243,7 +244,7 @@ export default function DoctorAIPage() {
         const body = paragraph.slice(titleEnd).trim();
         return (
           <div key={idx} className="mb-2">
-            <span className="font-bold text-navy block text-xs uppercase tracking-wider mb-0.5">{title}</span>
+            <span className="font-bold text-sky-700 dark:text-sky-300 block text-xs uppercase tracking-wider mb-0.5">{title}</span>
             <span>{body}</span>
           </div>
         );
@@ -253,17 +254,25 @@ export default function DoctorAIPage() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto flex flex-col gap-4 h-full pb-4">
-      <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm font-semibold text-text-secondary w-fit">
-        <ArrowLeft className="w-4 h-4" /> Back
-      </button>
+    <div className="max-w-3xl mx-auto flex flex-col gap-4 h-full pb-4 px-2 sm:px-4">
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+        </button>
+        <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-sky-50 dark:bg-sky-950 text-sky-600 dark:text-sky-400 border border-sky-200 dark:border-sky-800">
+          <Sparkles className="w-3.5 h-3.5" /> Doctor AI Medical Assistant
+        </span>
+      </div>
 
       {user?.isGuest && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex items-center justify-between gap-3 text-xs text-amber-900 shadow-sm">
+        <div className="bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 rounded-2xl p-3.5 flex items-center justify-between gap-3 text-xs text-amber-900 dark:text-amber-200 shadow-sm">
           <div className="flex items-center gap-2.5">
             <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
             <span>
-              <strong>Guest AI Mode:</strong> Normal chat is available. Sign in to access document upload and personalized HealthPack features.
+              <strong>Guest AI Mode:</strong> Symptom checking active. Sign in to link document uploads and HealthPack profiles.
             </span>
           </div>
           <button
@@ -275,12 +284,12 @@ export default function DoctorAIPage() {
         </div>
       )}
 
-      <div className="bg-paleblue border border-lightblue rounded-xl p-3 flex items-center justify-between text-xs text-navy-dark">
-        <div className="flex items-center gap-2.5">
-          <AlertTriangle className="w-4 h-4 shrink-0 text-accent-dark" />
+      <div className="bg-sky-50/80 dark:bg-slate-850 border border-sky-200/60 dark:border-slate-800 rounded-2xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-700 dark:text-slate-300">
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
           <span>AI-assisted guidance only. Qualified doctor review required.</span>
         </div>
-        <label className="flex items-center gap-1.5 font-medium cursor-pointer text-sky-700 hover:text-navy">
+        <label className="flex items-center gap-1.5 font-semibold cursor-pointer text-sky-600 dark:text-sky-400 hover:text-sky-700">
           <input
             type="checkbox"
             checked={!user?.isGuest && useHealthPack}
@@ -292,7 +301,7 @@ export default function DoctorAIPage() {
               }
               setUseHealthPack(e.target.checked);
             }}
-            className="rounded text-sky-600 focus:ring-sky-400"
+            className="rounded text-sky-500 focus:ring-sky-400"
           />
           <ShieldCheck className="w-3.5 h-3.5" />
           <span>Use HealthPack Profile</span>
@@ -300,56 +309,62 @@ export default function DoctorAIPage() {
       </div>
 
       {emergencySignal && (
-        <div className="bg-emergency/5 border border-emergency rounded-xl p-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-emergency text-white flex items-center justify-center shrink-0">
+        <div className="bg-rose-50 dark:bg-rose-950/80 border border-rose-300 dark:border-rose-800 rounded-2xl p-4 shadow-emergency animate-pulse">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0">
               <Siren className="w-5 h-5" />
             </div>
             <div>
-              <p className="font-bold text-emergency text-sm">Emergency Red-Flags Detected</p>
-              <p className="text-xs text-text-secondary mt-0.5">
+              <p className="font-extrabold text-rose-700 dark:text-rose-300 text-sm">Emergency Red-Flags Detected</p>
+              <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
                 Severity: {emergencySignal.severity} — {emergencySignal.detectedWords.join(", ")}
               </p>
             </div>
           </div>
-          <button
+          <Button
+            variant="emergency"
+            size="md"
+            fullWidth
             onClick={handleEmergencyNow}
             disabled={creatingSos}
-            className="mt-3 w-full flex items-center justify-center gap-2 text-sm font-bold text-white bg-emergency rounded-xl py-3 px-4 hover:bg-red-700 transition-colors disabled:opacity-50"
+            className="mt-3"
+            icon={<Siren className="w-4 h-4" />}
           >
-            <Siren className="w-4 h-4" /> {creatingSos ? 'Triggering Emergency...' : 'Report Emergency Now'}
-          </button>
+            {creatingSos ? 'Triggering Emergency...' : 'Report Emergency Now'}
+          </Button>
         </div>
       )}
 
-      <Card className="flex flex-col h-[65vh]">
-        <div className="flex items-center gap-2.5 pb-3 mb-1 border-b border-slate-100">
-          <div className="w-9 h-9 rounded-xl bg-lightblue flex items-center justify-center">
-            <BrainCircuit className="w-4.5 h-4.5 text-navy-dark" />
+      <Card padded={false} className="flex flex-col h-[65vh] shadow-soft overflow-hidden">
+        {/* Assistant Chat Header */}
+        <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-850 border-b border-slate-200/80 dark:border-slate-800">
+          <div className="w-10 h-10 rounded-xl bg-sky-500 text-white flex items-center justify-center shrink-0 shadow-glow">
+            <BrainCircuit className="w-5 h-5" />
           </div>
           <div>
-            <p className="font-bold text-navy text-sm">CareSetu Doctor AI</p>
-            <p className="text-[11px] text-text-secondary">Symptom checker & AI health assistant</p>
+            <p className="font-bold text-slate-900 dark:text-white text-sm">CareSetu Doctor AI</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Conversational symptom checker & triage assistant</p>
           </div>
         </div>
 
-        <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-thin flex flex-col gap-3 py-3">
+        {/* Messages Stream */}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-thin flex flex-col gap-3 p-4 bg-slate-50/40 dark:bg-slate-900">
           {messages.map((m) => (
             <div
               key={m.id}
-              className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
+              className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
                 m.from === "user"
-                  ? "bg-sky text-navy self-end rounded-br-sm"
+                  ? "bg-sky-500 text-white self-end rounded-br-none shadow-sm font-medium"
                   : m.isError
-                  ? "bg-red-50 text-red-700 self-start rounded-bl-sm border border-red-200"
-                  : "bg-slate-50 text-navy self-start rounded-bl-sm"
+                  ? "bg-rose-50 dark:bg-rose-950 text-rose-800 dark:text-rose-200 self-start rounded-bl-none border border-rose-200 dark:border-rose-900"
+                  : "bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 self-start rounded-bl-none border border-slate-200/80 dark:border-slate-700/60 shadow-card"
               }`}
             >
               {m.from === "ai" ? renderFormattedText(m.text) : m.text}
               {m.isError && (
                 <button
                   onClick={() => send(messages[messages.length - 2]?.text || "")}
-                  className="mt-2 text-xs font-semibold text-red-700 underline flex items-center gap-1"
+                  className="mt-2 text-xs font-semibold text-rose-600 dark:text-rose-400 underline flex items-center gap-1"
                 >
                   <RefreshCw className="w-3 h-3" /> Retry Message
                 </button>
@@ -357,32 +372,37 @@ export default function DoctorAIPage() {
             </div>
           ))}
           {thinking && (
-            <div className="self-start bg-slate-50 px-3.5 py-2.5 rounded-2xl rounded-bl-sm text-sm text-text-secondary flex items-center gap-2">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            <div className="self-start bg-white dark:bg-slate-800 px-4 py-3 rounded-2xl rounded-bl-none text-xs text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 flex items-center gap-2">
+              <RefreshCw className="w-3.5 h-3.5 text-sky-500 animate-spin" />
               <span>Analyzing symptoms & formulating guidance...</span>
             </div>
           )}
         </div>
 
         {attachedFile && (
-          <div className="px-3 py-1.5 bg-sky-50 border border-sky-100 rounded-xl text-xs text-navy flex items-center justify-between mb-2">
+          <div className="px-4 py-2 bg-sky-50 dark:bg-sky-950 border-t border-sky-200 dark:border-sky-800 text-xs text-sky-800 dark:text-sky-200 flex items-center justify-between">
             <span>Attached Document: <strong>{attachedFile.name}</strong> ({(attachedFile.size / 1024).toFixed(1)} KB)</span>
-            <button onClick={() => setAttachedFile(null)} className="text-red-500 font-bold hover:underline">Remove</button>
+            <button onClick={() => setAttachedFile(null)} className="text-rose-500 font-bold hover:underline">Remove</button>
           </div>
         )}
 
         {messages.length <= 1 && (
-          <div className="flex flex-wrap gap-2 pb-3">
+          <div className="flex flex-wrap gap-2 px-4 py-2 bg-slate-50/60 dark:bg-slate-900 border-t border-slate-200/60 dark:border-slate-800">
             {starterPrompts.map((p) => (
-              <button key={p} onClick={() => send(p)} className="text-xs font-medium px-3 py-1.5 rounded-full border border-slate-200 text-navy hover:border-sky">
+              <button
+                key={p}
+                onClick={() => send(p)}
+                className="text-xs font-medium px-3 py-1.5 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-sky-500 hover:text-sky-600 transition-colors shadow-xs"
+              >
                 {p}
               </button>
             ))}
           </div>
         )}
 
+        {/* Input Form */}
         <form
-          className="flex items-center gap-2 pt-3 border-t border-slate-100"
+          className="flex items-center gap-2 p-3 bg-white dark:bg-slate-850 border-t border-slate-200/80 dark:border-slate-800"
           onSubmit={(e) => {
             e.preventDefault();
             send(input);
@@ -404,44 +424,44 @@ export default function DoctorAIPage() {
               }
               fileInputRef.current?.click();
             }}
-            className="p-2 rounded-xl text-text-secondary hover:bg-slate-50"
+            className="p-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             aria-label="Attach medical document"
             title="Attach Health Pack document (PDF, JPG, PNG)"
           >
-            <Paperclip className="w-4.5 h-4.5" />
+            <Paperclip className="w-5 h-5" />
           </button>
           <button
             type="button"
             onClick={toggleVoiceInput}
-            className={`p-2 rounded-xl transition-colors ${
-              isListening ? "bg-emergency/15 text-emergency animate-pulse" : "text-text-secondary hover:bg-slate-50"
+            className={`p-2.5 rounded-xl transition-colors ${
+              isListening ? "bg-rose-100 text-rose-600 animate-pulse" : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
             }`}
             title={isListening ? "Listening... Click to stop" : "Speak symptoms"}
             aria-label="Voice input"
           >
-            {isListening ? <MicOff className="w-4.5 h-4.5 text-emergency" /> : <Mic className="w-4.5 h-4.5" />}
+            {isListening ? <MicOff className="w-5 h-5 text-rose-600" /> : <Mic className="w-5 h-5" />}
           </button>
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Describe your symptoms or ask a health question..."
-            className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-sky/30 focus:border-sky outline-none"
+            className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
             aria-label="Symptom or health question input"
           />
-          <Button type="submit" variant="primary" size="sm" icon={<Send className="w-4 h-4" />}>
+          <Button type="submit" variant="primary" size="md" icon={<Send className="w-4 h-4" />}>
             Send
           </Button>
         </form>
       </Card>
 
       {showGuestModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/50 backdrop-blur-sm p-4 animate-fade-in">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 text-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 text-center">
             <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto mb-4">
               <ShieldCheck className="w-6 h-6" />
             </div>
-            <h3 className="text-lg font-extrabold text-navy">This feature requires a registered account.</h3>
-            <p className="text-sm text-text-secondary mt-2">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">This feature requires a registered account.</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
               Sign in or create a CareSetu account to upload medical documents, access your personalized HealthPack history, and get tailored AI analysis.
             </p>
             <div className="flex flex-col gap-2 mt-6">
@@ -453,7 +473,7 @@ export default function DoctorAIPage() {
               </Button>
               <button
                 onClick={() => setShowGuestModal(false)}
-                className="mt-2 text-xs font-semibold text-text-secondary hover:text-navy"
+                className="mt-2 text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
               >
                 Continue in Guest Mode
               </button>

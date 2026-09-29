@@ -2,21 +2,23 @@ import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { Home, Siren, Building2, ShieldCheck, User, Lock } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { useTranslation } from "../../i18n";
 import Button from "../common/Button";
-
-const items = [
-  { to: "/patient/dashboard", label: "Home", icon: Home },
-  { to: "/patient/emergency", label: "Emergency", icon: Siren },
-  { to: "/patient/hospitals", label: "Hospitals", icon: Building2 },
-  { to: "/patient/health-pack", label: "Health Pack", icon: ShieldCheck },
-  { to: "/patient/profile", label: "Profile", icon: User },
-];
 
 export default function MobileBottomNav() {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [showRestrictionModal, setShowRestrictionModal] = useState(false);
   const [restrictedLabel, setRestrictedLabel] = useState("");
+
+  const items = [
+    { to: "/patient/dashboard", label: t("nav.home"), key: "nav.home", icon: Home },
+    { to: "/patient/emergency", label: t("nav.reportEmergency"), key: "nav.reportEmergency", icon: Siren },
+    { to: "/patient/hospitals", label: t("nav.hospitals"), key: "nav.hospitals", icon: Building2 },
+    { to: "/patient/health-pack", label: t("nav.healthPack"), key: "nav.healthPack", icon: ShieldCheck },
+    { to: "/patient/profile", label: t("nav.profile"), key: "nav.profile", icon: User },
+  ];
 
   const isGuest = user?.isGuest || user?.role === "guest";
   const isAllowedGuestPath = (to: string) => {
@@ -42,11 +44,11 @@ export default function MobileBottomNav() {
             className={({ isActive }) =>
               `flex flex-col items-center justify-center gap-1 py-2.5 text-[11px] font-medium ${
                 isActive ? "text-sky" : "text-text-secondary"
-              } ${item.label === "Emergency" ? "relative" : ""}`
+              } ${item.to === "/patient/emergency" ? "relative" : ""}`
             }
           >
             {({ isActive }) =>
-              item.label === "Emergency" ? (
+              item.to === "/patient/emergency" ? (
                 <>
                   <div className={`w-9 h-9 rounded-full flex items-center justify-center -mt-5 shadow-lg ${isActive ? "bg-emergency" : "bg-emergency"}`}>
                     <item.icon className="w-4.5 h-4.5 text-white" />
