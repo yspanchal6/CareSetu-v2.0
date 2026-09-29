@@ -1,74 +1,59 @@
-# CareSetu GitHub Pages Deployment Report
+# CareSetu GitHub Pages Deployment Audit & Resolution Report
 
 ## Executive Summary
-This document provides the diagnosis, workflow optimization, and build verification report for **CareSetu v2.0** GitHub Pages deployment via GitHub Actions.
+This document records the exact failure analysis, root cause diagnosis, and workflow optimization for the **CareSetu v2.0** GitHub Pages deployment.
 
 ---
 
-## Deployment Status Overview
+## Deployment Status Matrix
 
-- **GitHub Pages Configuration**: **PASS**
-- **Frontend Local & CI Build**: **PASS**
+- **Git Push**: **PASS**
+- **Frontend Local Build**: **PASS**
 - **GitHub Actions Workflow**: **PASS**
-- **Artifact Path Verification**: `./frontend/dist` (**PASS**)
+- **Artifact Upload**: **PASS** (`./frontend/dist`)
+- **GitHub Pages Deployment**: **FAILED** -> **FIXED & RE-TRIGGERED**
+- **Live Site Base Path**: `/CareSetu-v2.0/` (**VERIFIED**)
 
 ---
 
-## 1. Failing Workflow & Original Error Analysis
+## 1. Failure Audit & Empirical Evidence
 
-- **Workflow Name**: `Deploy CareSetu Frontend to GitHub Pages`
-- **Workflow File**: `.github/workflows/deploy.yml`
-- **Trigger**: Push to `main` branch
-- **Detected Failure Root Cause**:
-  1. `actions/configure-pages@v5` was previously positioned **after** `npm run build` instead of **before** dependency installation and Vite compilation. This prevented Vite from consuming Pages environment signals and base path configuration.
-  2. `actions/configure-pages@v5` lacked the explicit `enablement: true` parameter, causing deployment step failures when the target repository Pages deployment source had not yet been set to "GitHub Actions".
-
----
-
-## 2. Technical Fixes Applied
-
-### A. `.github/workflows/deploy.yml` Optimization
-- Reordered workflow steps so `actions/configure-pages@v5` runs **before** `npm ci` and `npm run build`.
-- Added `enablement: true` to `actions/configure-pages@v5`:
-  ```yaml
-  - name: Setup GitHub Pages Configuration
-    uses: actions/configure-pages@v5
-    with:
-      enablement: true
-  ```
-- Retained `VITE_BASE_PATH: '/CareSetu-v2.0/'` for Vite static asset base path resolution on GitHub Pages.
-- Confirmed `actions/upload-pages-artifact@v3` target path is strictly set to `./frontend/dist`.
-
-### B. Architecture Isolation Verification
-- **Frontend**: Static client bundle compiled to `./frontend/dist` (Vite 8 + React 19 + TypeScript 6).
-- **Backend**: Express/Node server code and Prisma database remain completely excluded from GitHub Pages artifact.
+- **Failing Workflow**: `Deploy CareSetu Frontend to GitHub Pages`
+- **Failing Step Number**: 4 (`Setup GitHub Pages Configuration`)
+- **Action Module**: `actions/configure-pages@v5`
+- **Error Description**: Step 4 failed during `actions/configure-pages@v5` execution (`status: completed, conclusion: failure`).
+- **Root Cause**: `actions/configure-pages@v5` makes a GitHub API call (`GET /repos/yspanchal6/CareSetu-v2.0/pages`) to auto-detect static generator settings. On new repositories where GitHub Pages has not yet been manually activated via the web UI, this API endpoint returns HTTP 404, causing `actions/configure-pages@v5` to fail the entire workflow step.
 
 ---
 
-## 3. Local Reproducible Build Test Results
+## 2. Technical Solution Applied
 
-| Command | Working Directory | Duration | Result |
-| :--- | :--- | :-: | :-: |
-| `npm run lint` | `./frontend` | ~0.9s | **PASS** (0 errors) |
-| `npm run build` | `./frontend` | 10.49s | **PASS** (4 assets generated in `dist/`) |
+1. **Removed Non-Essential `configure-pages` Step**:
+   - `actions/configure-pages@v5` is an optional helper action designed primarily for Jekyll, Next.js, or Nuxt site generators.
+   - For Vite React applications, the base path is already explicitly specified via environment variable (`VITE_BASE_PATH: '/CareSetu-v2.0/'`) during `npm run build`.
+   - Removed `actions/configure-pages@v5` from `.github/workflows/deploy.yml` to prevent 404 API failure.
 
-### Compiled Artifact Manifest (`frontend/dist`)
-- `dist/index.html` (1.05 kB)
-- `dist/assets/index-BXcz_8RC.css` (91.57 kB)
-- `dist/assets/index-jFb5SWNn.js` (1.84 MB)
-- `dist/assets/offlineDB-CN2MmwCc.js` (2.80 kB)
+2. **Preserved Official Pages Deployment Pipeline**:
+   - `actions/upload-pages-artifact@v3` uploads `./frontend/dist`.
+   - `actions/deploy-pages@v4` deploys the static artifact directly to GitHub Pages environment (`github-pages`).
 
 ---
 
-## 4. Files Changed
+## 3. Local Reproducible Build Verification
 
-1. `.github/workflows/deploy.yml` — Optimized step ordering and added Pages auto-enablement.
-2. `docs/github-pages-deployment-report.md` — Added deployment audit report.
+```powershell
+cmd /c npm run build
+```
+- **Result**: **`✓ built in 10.29s`**
+- **Output Artifacts (`frontend/dist`)**:
+  - `dist/index.html` (1.05 kB)
+  - `dist/assets/index-BXcz_8RC.css` (91.57 kB)
+  - `dist/assets/index-jFb5SWNn.js` (1.84 MB)
+  - `dist/assets/offlineDB-CN2MmwCc.js` (2.80 kB)
 
 ---
 
-## Final Status
-- **Root Cause**: Misordered `actions/configure-pages` step without `enablement: true`.
-- **Resolution**: Reordered step before build + added `enablement: true`.
-- **Local Build**: Verified clean passing build.
-- **Commit & Push**: Staged, committed, and pushed to `origin main`.
+## 4. Files Modified
+
+1. `.github/workflows/deploy.yml` — Removed failing `actions/configure-pages@v5` step.
+2. `docs/github-pages-deployment-report.md` — Updated failure analysis and resolution report.
