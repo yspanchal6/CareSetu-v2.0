@@ -5,13 +5,18 @@ import { getAuthToken } from '../services/api';
 
 // Use standard env variables for React (Vite uses import.meta.env)
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "YOUR_FIREBASE_API_KEY",
+  // apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "YOUR_FIREBASE_API_KEY",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "",
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "caresetu-37de6.firebaseapp.com",
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "caresetu-37de6",
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "caresetu-37de6.firebasestorage.app",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "872960501616",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "YOUR_FIREBASE_APP_ID",
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-4S0MVRPK06"
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "",
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || ""
+
+  // messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "872960501616",
+  // appId: import.meta.env.VITE_FIREBASE_APP_ID || "YOUR_FIREBASE_APP_ID",
+  // measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-4S0MVRPK06"
 };
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();

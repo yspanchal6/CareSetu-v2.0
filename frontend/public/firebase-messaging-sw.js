@@ -2,13 +2,13 @@ importScripts('https://www.gstatic.com/firebasejs/12.19.0/firebase-app-compat.js
 importScripts('https://www.gstatic.com/firebasejs/12.19.0/firebase-messaging-compat.js');
 
 const firebaseConfig = {
-  apiKey: "YOUR_FIREBASE_API_KEY",
+  apiKey: "",
   authDomain: "caresetu-37de6.firebaseapp.com",
   projectId: "caresetu-37de6",
   storageBucket: "caresetu-37de6.firebasestorage.app",
-  messagingSenderId: "872960501616",
-  appId: "YOUR_FIREBASE_APP_ID",
-  measurementId: "G-4S0MVRPK06"
+  messagingSenderId: "",
+  appId: "",
+  measurementId: ""
 };
 
 firebase.initializeApp(firebaseConfig);
