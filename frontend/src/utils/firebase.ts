@@ -5,23 +5,26 @@ import { getAuthToken } from '../services/api';
 
 // Use standard env variables for React (Vite uses import.meta.env)
 const firebaseConfig = {
-  // apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "YOUR_FIREBASE_API_KEY",
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyBArc8ad30JBGN42EYiiYCD2ry0aY0TBZ4",
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "caresetu-37de6.firebaseapp.com",
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "caresetu-37de6",
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "caresetu-37de6.firebasestorage.app",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "",
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || ""
-
-  // messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "872960501616",
-  // appId: import.meta.env.VITE_FIREBASE_APP_ID || "YOUR_FIREBASE_APP_ID",
-  // measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-4S0MVRPK06"
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "872960501616",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:872960501616:web:8306de29a73e8525a191b5",
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-4S0MVRPK06"
 };
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+let app: ReturnType<typeof initializeApp> | undefined;
+let authInstance: ReturnType<typeof getAuth> | undefined;
 
-export const auth = getAuth(app);
+try {
+  app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+  authInstance = getAuth(app);
+} catch (err) {
+  console.warn('[Firebase] Auth initialization warning:', err);
+}
+
+export const auth = authInstance!;
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
