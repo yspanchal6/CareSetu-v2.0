@@ -303,6 +303,18 @@ npm run build
 
 ---
 
+## 👥 Team & Contributors — Smart India Hackathon 2026
+
+| Member | Role | Responsibility | GitHub Profile |
+|:---:|:---|:---|:---|
+| 👑 | **Yash Panchal** | Team Lead & Full-Stack Architect | [@yspanchal6](https://github.com/yspanchal6) |
+| 💻 | **Frontend Lead** | UI/UX & React PWA Architecture | [@CareSetu-Team](https://github.com/yspanchal6/CareSetu-v2.0) |
+| ⚙️ | **Backend Lead** | API Services & Database Infrastructure | [@CareSetu-Team](https://github.com/yspanchal6/CareSetu-v2.0) |
+| 🤖 | **AI/ML Specialist** | Medical NLP & Symptom Extraction Sidecar | [@CareSetu-Team](https://github.com/yspanchal6/CareSetu-v2.0) |
+| 🩺 | **Healthcare Operations** | Clinical Triage & Safety Rule Compliance | [@CareSetu-Team](https://github.com/yspanchal6/CareSetu-v2.0) |
+
+---
+
 ## 📄 License
 
 This project is licensed under the [MIT License](LICENSE).
