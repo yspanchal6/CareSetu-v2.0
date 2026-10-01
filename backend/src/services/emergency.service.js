@@ -77,11 +77,11 @@ function buildCaseSnapshot(emergencyCase, hospitalRequests = []) {
     closedAt: emergencyCase.closedAt,
     hospital: emergencyCase.hospital
       ? {
-          id: emergencyCase.hospital.id,
-          name: emergencyCase.hospital.name,
-          address: emergencyCase.hospital.address,
-          phone: emergencyCase.hospital.phone,
-        }
+        id: emergencyCase.hospital.id,
+        name: emergencyCase.hospital.name,
+        address: emergencyCase.hospital.address,
+        phone: emergencyCase.hospital.phone,
+      }
       : null,
     attempts,
   };
@@ -200,7 +200,7 @@ const createEmergencyCase = async ({ userId, emergencyType, severity, latitude, 
       status: 'PENDING',
       source: source || 'PATIENT_APP',
       idempotencyKey: idempotencyKey || null,
-      aiReason: `Priority: ${safetyResult.priority}, Rule: ${safetyResult.matchedRule}`, 
+      aiReason: `Priority: ${safetyResult.priority}, Rule: ${safetyResult.matchedRule}`,
       medicalSummary: encryptedSummary,
     });
   } catch (error) {
@@ -208,7 +208,7 @@ const createEmergencyCase = async ({ userId, emergencyType, severity, latitude, 
       const existingCase = await emergencyRepository.getEmergencyCaseByIdempotencyKey(idempotencyKey);
       return {
         emergencyCase: existingCase,
-        nearestHospitals: [], 
+        nearestHospitals: [],
         isIdempotentResponse: true
       };
     }
@@ -241,9 +241,10 @@ const createEmergencyCase = async ({ userId, emergencyType, severity, latitude, 
     matchedHospitals = [];
   }
 
-  // 7. Create Hospital Requests
+  // 7. Create Hospital Requests (Sequential Targeted Queue)
   if (matchedHospitals.length > 0) {
-    const requestsData = matchedHospitals.map(match => ({
+    const now = new Date();
+    const requestsData = matchedHospitals.map((match, idx) => ({
       emergencyCaseId: emergencyCase.id,
       hospitalId: match.hospital.id,
       status: 'PENDING',
@@ -251,75 +252,81 @@ const createEmergencyCase = async ({ userId, emergencyType, severity, latitude, 
       capabilityMatched: match.capabilityMatched,
       availabilityMatched: match.availabilityMatched,
       matchScore: match.matchScore,
+      // Target Candidate 0 first; Candidates 1..N-1 are queued with requestedAt: null
+      requestedAt: idx === 0 ? now : null,
     }));
-    
+
     await emergencyRepository.createHospitalRequests(requestsData);
 
     let io = global.io;
     if (!io) {
-      try { io = getIo(); } catch {}
+      try { io = getIo(); } catch { }
     }
 
-    if (matchedHospitals.length > 0) {
-      for (const m of matchedHospitals) {
-        const hospital = m.hospital;
-        const hospitalUserId = hospital.userId;
-        const distanceStr = m.distanceKm != null ? m.distanceKm.toFixed(1) : 'N/A';
+    const isRedFlag = emergencyCase.severity === 'RED' || emergencyCase.severity === 'ORANGE';
 
-        const rawBloodGroup = patient?.bloodGroup ? String(patient.bloodGroup).trim() : null;
-        const bloodGroup = rawBloodGroup || patientMedicalHistory?.bloodGroup || null;
+    // Dispatch active alert ONLY to Candidate 0 (the top-ranked hospital)
+    const activeMatch = matchedHospitals[0];
+    if (activeMatch) {
+      const hospital = activeMatch.hospital;
+      const hospitalUserId = hospital.userId;
+      const distanceStr = activeMatch.distanceKm != null ? activeMatch.distanceKm.toFixed(1) : 'N/A';
 
-        const rawKnownConditions = (patient?.medicalConditions ? String(patient.medicalConditions).trim() : null) ||
-                                    (patient?.conditions ? String(patient.conditions).trim() : null);
-        const knownConditions = rawKnownConditions || patientMedicalHistory?.knownConditions || null;
+      const rawBloodGroup = patient?.bloodGroup ? String(patient.bloodGroup).trim() : null;
+      const bloodGroup = rawBloodGroup || patientMedicalHistory?.bloodGroup || null;
 
-        // Emergency Socket Payload for Hospital Alert
-        const payload = {
-          caseId: emergencyCase.caseId,
-          publicCaseId: emergencyCase.caseId,
-          emergencyType: emergencyCase.emergencyType,
-          severity: emergencyCase.severity,
-          symptoms: emergencyCase.symptoms,
-          source: emergencyCase.source || 'DIRECT',
-          distanceKm: m.distanceKm,
-          hospitalRequestId: requestsData.find(r => r.hospitalId === hospital.id)?.id,
+      const rawKnownConditions = (patient?.medicalConditions ? String(patient.medicalConditions).trim() : null) ||
+        (patient?.conditions ? String(patient.conditions).trim() : null);
+      const knownConditions = rawKnownConditions || patientMedicalHistory?.knownConditions || null;
+
+      const payload = {
+        caseId: emergencyCase.caseId,
+        publicCaseId: emergencyCase.caseId,
+        emergencyType: emergencyCase.emergencyType,
+        severity: emergencyCase.severity,
+        isRedFlag,
+        symptoms: emergencyCase.symptoms,
+        source: emergencyCase.source || 'DIRECT',
+        distanceKm: activeMatch.distanceKm,
+        hospitalRequestId: requestsData[0]?.id,
+        bloodGroup: bloodGroup,
+        knownConditions: knownConditions,
+        patientInfo: {
+          name: patient.name,
+          age: patient.age,
+          gender: patient.gender,
+          phone: patient.phone,
           bloodGroup: bloodGroup,
           knownConditions: knownConditions,
-          patientInfo: {
-            name: patient.name,
-            age: patient.age,
-            gender: patient.gender,
-            phone: patient.phone,
-            bloodGroup: bloodGroup,
-            knownConditions: knownConditions,
-            medicalConditions: knownConditions,
-          },
-          patientLocation: {
-            latitude: Number(latitude),
-            longitude: Number(longitude),
-          },
-          requestedAt: new Date().toISOString(),
-        };
+          medicalConditions: knownConditions,
+        },
+        patientLocation: {
+          latitude: Number(latitude),
+          longitude: Number(longitude),
+        },
+        requestedAt: now.toISOString(),
+      };
 
-        if (io) {
-          try {
-            io.to(`hospital:${hospitalUserId}`).emit('emergency:new-case', payload);
-            if (hospitalUserId) {
-              io.to(hospitalUserId).emit('emergency:new-case', payload);
-            }
-            console.log(`[Socket] Emitted emergency:new-case to hospital:${hospitalUserId}`, payload.caseId);
-          } catch (socketErr) {
-            console.error('[Socket] Failed to emit:', socketErr.message);
+      if (io) {
+        try {
+          io.to(`hospital:${hospitalUserId}`).emit('emergency:new-case', payload);
+          if (hospitalUserId) {
+            io.to(hospitalUserId).emit('emergency:new-case', payload);
           }
+          console.log(`[Socket] Emitted emergency:new-case to targeted hospital:${hospitalUserId}`, payload.caseId);
+        } catch (socketErr) {
+          console.error('[Socket] Failed to emit:', socketErr.message);
         }
+      }
 
-        // 1. Non-blocking SMS
+      // RED FLAG CASES ONLY: Send SMS and High-Priority Push Alerts
+      if (isRedFlag) {
         if (hospital.phone) {
           textbeeProvider.sendSMS(
             hospital.phone,
-            `🚨 CARESETU EMERGENCY ALERT\n\nCase: ${emergencyCase.caseId}\nSeverity: ${emergencyCase.severity}\nDistance: ${distanceStr} km\nSymptoms: ${emergencyCase.symptoms || 'Not provided'}\n\nOpen dashboard to ACCEPT/REJECT.`
-          ).then(() => console.log(`[SMS] Sent to ${hospital.name}`))
-           .catch(err => console.error(`[SMS] Failed for ${hospital.name}:`, err.message));
+            `🚨 CARESETU RED-ALERT EMERGENCY\n\nCase: ${emergencyCase.caseId}\nSeverity: ${emergencyCase.severity}\nDistance: ${distanceStr} km\nSymptoms: ${emergencyCase.symptoms || 'Not provided'}\n\nOpen dashboard to ACCEPT.`
+          ).then(() => console.log(`[SMS] Sent Red Alert to ${hospital.name}`))
+            .catch(err => console.error(`[SMS] Failed for ${hospital.name}:`, err.message));
         }
 
         // 2. Non-blocking Email
@@ -362,32 +369,20 @@ const createEmergencyCase = async ({ userId, emergencyType, severity, latitude, 
             });
           }).catch(err => console.error(`[FCM Token Lookup] Failed:`, err.message));
         }
+      } else {
+        console.log(`[Notification] Non-critical Green/Yellow flag case (${emergencyCase.severity}) — dispatched in-app/socket alert without SMS/high-priority push siren.`);
       }
-    } else {
-      console.warn('[Socket] Skipped emit — no hospitals or io not available');
-    }
-
-    const firstHospital = matchedHospitals[0]?.hospital;
-    if (firstHospital && firstHospital.userId) {
-      const rawBloodGroup = patient?.bloodGroup ? String(patient.bloodGroup).trim() : null;
-      const bloodGroup = rawBloodGroup || patientMedicalHistory?.bloodGroup || null;
-      const rawKnownConditions = (patient?.medicalConditions ? String(patient.medicalConditions).trim() : null) ||
-                                  (patient?.conditions ? String(patient.conditions).trim() : null);
-      const knownConditions = rawKnownConditions || patientMedicalHistory?.knownConditions || null;
 
       notificationService.notifyHospital(
-        firstHospital.userId,
+        hospitalUserId,
         `An emergency case (${emergencyCase.caseId}) requires your immediate attention.`,
         {
           emergencyCaseId: emergencyCase.id,
           caseId: emergencyCase.caseId,
-          distanceKm: matchedHospitals[0]?.distanceKm != null ? String(matchedHospitals[0].distanceKm) : '0',
-          bloodGroup: bloodGroup,
-          knownConditions: knownConditions,
-          blood_group: bloodGroup || 'Not provided',
-          medical_conditions: knownConditions || 'Not provided',
+          distanceKm: activeMatch.distanceKm != null ? String(activeMatch.distanceKm) : '0',
+          isRedFlag,
         },
-        firstHospital.phone
+        hospital.phone
       ).catch(err => console.error('[NotifyHospital] Non-blocking warning:', err.message));
     }
   }

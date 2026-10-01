@@ -250,6 +250,22 @@ const adminLimiter = rateLimit({
   message: { error: 'Admin endpoint request limit reached.' },
 });
 
+/**
+ * Share Token Limiter (30 requests per minute)
+ */
+const shareTokenLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: process.env.NODE_ENV === 'test' ? 10000 : 30,
+  skip: () => process.env.NODE_ENV === 'test',
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: redisStore,
+  validate: false,
+  keyGenerator: createRateLimitKeyGenerator('share_token'),
+  handler: createRateLimitHandler('share_token'),
+  message: { error: 'Share token rate limit reached. Please wait a minute.' },
+});
+
 module.exports = {
   createRateLimitHandler,
   createRateLimitKeyGenerator,
@@ -267,5 +283,6 @@ module.exports = {
   docDownloadLimiter,
   aiChatLimiter,
   adminLimiter,
+  shareTokenLimiter,
   passwordChangeRateLimiter: loginRateLimiter,
 };

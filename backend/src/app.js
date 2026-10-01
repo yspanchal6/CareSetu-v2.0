@@ -5,7 +5,7 @@ const morgan = require('morgan');
 const prisma = require('./config/prisma');
 const logger = require('./utils/logger');
 const { helmetConfig, correlationIdMiddleware } = require('./middleware/security-headers.middleware');
-const { apiLimiter, aiChatLimiter, adminLimiter, docDownloadLimiter } = require('./middleware/rate-limiters');
+const { apiLimiter, aiChatLimiter, adminLimiter, docDownloadLimiter, shareTokenLimiter } = require('./middleware/rate-limiters');
 
 const authRoutes = require('./routes/auth.routes');
 const emergencyRoutes = require('./routes/emergency.routes');
@@ -24,6 +24,8 @@ const accountDeletionRoutes = require('./routes/account-deletion.routes');
 const govHealthDataRoutes = require('./routes/gov-health-data.routes');
 const hospitalMatchingRoutes = require('./routes/hospital-matching.routes');
 const hospitalSecurityRoutes = require('./routes/hospital-security.routes');
+const urlTokenRoutes = require('./routes/url-token.routes');
+const opaqueRouteRoutes = require('./routes/opaque-route.routes');
 
 const app = express();
 
@@ -88,6 +90,8 @@ app.use('/api/chat', aiChatLimiter, chatRoutes);
 app.use('/api/geocoding', geocodingRoutes);
 app.use('/api/security', hospitalSecurityRoutes);
 app.use('/api/hospital', hospitalSecurityRoutes);
+app.use('/api/share-tokens', shareTokenLimiter, urlTokenRoutes);
+app.use('/api/opaque-routes', shareTokenLimiter, opaqueRouteRoutes);
 
 // Comprehensive Deep Health Check Endpoint
 app.get(['/health', '/api/health'], async (req, res) => {

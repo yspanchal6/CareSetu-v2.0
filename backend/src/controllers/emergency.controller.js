@@ -126,8 +126,8 @@ exports.createSOS = async (req, res, next) => {
 
     const bloodGroup = patientProfile?.bloodGroup ? String(patientProfile.bloodGroup).trim() : null;
     const knownConditions = (patientProfile?.medicalConditions ? String(patientProfile.medicalConditions).trim() : null) ||
-                            (patientProfile?.conditions ? String(patientProfile.conditions).trim() : null) ||
-                            null;
+      (patientProfile?.conditions ? String(patientProfile.conditions).trim() : null) ||
+      null;
 
     const result = await emergencyService.createEmergencyCase({
       userId,
@@ -161,9 +161,9 @@ exports.createSOS = async (req, res, next) => {
         emergencyType: result.emergencyCase.emergencyType,
         location: result.emergencyCase.location
           ? {
-              latitude: Number(result.emergencyCase.location.latitude),
-              longitude: Number(result.emergencyCase.location.longitude),
-            }
+            latitude: Number(result.emergencyCase.location.latitude),
+            longitude: Number(result.emergencyCase.location.longitude),
+          }
           : null,
         createdAt: result.emergencyCase.createdAt,
         acceptedAt: result.emergencyCase.acceptedAt,
@@ -220,20 +220,20 @@ exports.getSOSStatus = async (req, res, next) => {
         emergencyType: emergencyCase.emergencyType,
         location: emergencyCase.location
           ? {
-              latitude: Number(emergencyCase.location.latitude),
-              longitude: Number(emergencyCase.location.longitude),
-            }
+            latitude: Number(emergencyCase.location.latitude),
+            longitude: Number(emergencyCase.location.longitude),
+          }
           : null,
         createdAt: emergencyCase.createdAt,
         acceptedAt: emergencyCase.acceptedAt,
         closedAt: emergencyCase.closedAt,
         hospital: emergencyCase.hospital
           ? {
-              id: emergencyCase.hospital.id,
-              name: emergencyCase.hospital.name,
-              address: emergencyCase.hospital.address,
-              phone: emergencyCase.hospital.phone,
-            }
+            id: emergencyCase.hospital.id,
+            name: emergencyCase.hospital.name,
+            address: emergencyCase.hospital.address,
+            phone: emergencyCase.hospital.phone,
+          }
           : null,
         attempts,
       },
@@ -561,16 +561,16 @@ exports.acceptEmergency = async (req, res) => {
       }),
       ...(emergencyCase.patient?.userId
         ? [
-            prisma.notification.create({
-              data: {
-                userId: emergencyCase.patient.userId,
-                type: 'HOSPITAL_ACCEPTED',
-                title: 'Hospital Assigned',
-                message: 'A hospital has accepted your emergency request.',
-                data: { caseId: emergencyCase.caseId, hospitalId },
-              },
-            }),
-          ]
+          prisma.notification.create({
+            data: {
+              userId: emergencyCase.patient.userId,
+              type: 'HOSPITAL_ACCEPTED',
+              title: 'Hospital Assigned',
+              message: 'A hospital has accepted your emergency request.',
+              data: { caseId: emergencyCase.caseId, hospitalId },
+            },
+          }),
+        ]
         : []),
     ]);
 

@@ -10,6 +10,7 @@ import AuthLayout from "./layouts/AuthLayout";
 import PatientLayout from "./layouts/PatientLayout";
 import DashboardLayout from "./layouts/DashboardLayout";
 import ProtectedRoute from "./routes/ProtectedRoute";
+import OpaqueRouteResolver from "./routes/OpaqueRouteResolver";
 import { hospitalNav, doctorNav, adminNav, roleLabels } from "./routes/navConfig";
 
 import LandingPage from "./pages/public/LandingPage";
@@ -89,6 +90,7 @@ export default function App() {
             <BrowserRouter basename={import.meta.env.BASE_URL}>
               <Routes>
                 {/* Public site */}
+                <Route path="/app/:opaqueId" element={<OpaqueRouteResolver />} />
                 <Route element={<PublicLayout />}>
                   <Route path="/" element={<LandingPage />} />
                   <Route path="/how-it-works" element={<HowItWorksPage />} />

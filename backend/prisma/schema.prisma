@@ -246,6 +246,7 @@ model User {
   restrictionsRevoked AccountRestriction[] @relation("RestrictionsRevoked")
   pendingCredentialChanges PendingCredentialChange[]
   deletionRequests AccountDeletionRequest[]
+  urlShareTokens UrlShareToken[] @relation("TokensCreated")
 
   @@index([email])
   @@index([role])
@@ -635,7 +636,7 @@ model HospitalRequest {
 
   matchScore Float?
 
-  requestedAt DateTime @default(now())
+  requestedAt DateTime? @default(now())
 
   respondedAt DateTime?
 
@@ -1266,8 +1267,58 @@ model SecureViewSession {
   @@map("secure_view_sessions")
 }
 
+// ============================================================
+// URL TOKENIZATION & SECURE SHARING LINKS
+// ============================================================
 
+enum UrlTokenAction {
+  VIEW
+  DOWNLOAD
+  SHARE
+  EMERGENCY_READ
+}
 
+enum UrlTokenResourceType {
+  HEALTH_PACK
+  EMERGENCY_CASE
+  MEDICAL_DOCUMENT
+  GOVERNMENT_RECORD
+}
 
+model UrlShareToken {
+  id              String               @id @default(uuid())
+  tokenHash       String               @unique
+  resourceType    UrlTokenResourceType
+  resourceId      String
+  allowedAction   UrlTokenAction       @default(VIEW)
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  usedCount       Int                  @default(0)
+  maxUses         Int?
+  isOneTime       Boolean              @default(false)
+  createdByUserId String?
+  createdByUser   User?                @relation("TokensCreated", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
 
+  @@index([tokenHash])
+  @@index([resourceType, resourceId])
+  @@index([expiresAt])
+  @@index([createdByUserId])
+  @@map("url_share_tokens")
+}
 
+model OpaqueRoute {
+  id         String   @id @default(uuid())
+  opaqueId   String   @unique @map("opaque_id")
+  targetPath String   @map("target_path")
+  userId     String?  @map("user_id")
+  role       Role?    @map("role")
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([opaqueId])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("opaque_routes")
+}

@@ -16,6 +16,26 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearCloseTimeout = () => {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+  };
+
+  const handleMouseEnter = () => {
+    clearCloseTimeout();
+  };
+
+  const handleMouseLeave = () => {
+    clearCloseTimeout();
+    closeTimeoutRef.current = setTimeout(() => {
+      setIsOpen(false);
+      setSearchQuery('');
+    }, 180);
+  };
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -26,7 +46,10 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      clearCloseTimeout();
+    };
   }, []);
 
   // Auto focus search input on open
@@ -52,14 +75,23 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
   );
 
   return (
-    <div className={`relative inline-block text-left ${className}`} ref={dropdownRef} onKeyDown={handleKeyDown}>
+    <div
+      className={`relative inline-block text-left ${className}`}
+      ref={dropdownRef}
+      onKeyDown={handleKeyDown}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          clearCloseTimeout();
+          setIsOpen(!isOpen);
+        }}
         aria-expanded={isOpen}
         aria-haspopup="listbox"
         aria-label="Select application language"
-        className="inline-flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-semibold text-navy focus:outline-none focus:ring-2 focus:ring-sky/40 transition-all shadow-2xs cursor-pointer"
+        className="inline-flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-semibold text-navy focus:outline-none focus:ring-2 focus:ring-sky/40 transition-colors shadow-2xs cursor-pointer"
       >
         <Globe className="w-4 h-4 text-sky shrink-0" />
         <span className="truncate">
@@ -73,7 +105,7 @@ export const LanguageSelector: React.FC<LanguageSelectorProps> = ({
           role="listbox"
           tabIndex={-1}
           aria-label="Languages"
-          className="absolute right-0 mt-2 w-56 rounded-2xl bg-white border border-slate-200 shadow-2xl z-50 py-2 overflow-hidden animate-fade-in"
+          className="absolute right-0 mt-2 w-56 rounded-2xl bg-white border border-slate-200 shadow-2xl z-50 py-2 overflow-hidden animate-fade-in before:absolute before:-top-3 before:left-0 before:right-0 before:h-3 before:content-['']"
         >
           {/* Search Box */}
           <div className="px-3 pb-2 border-b border-slate-100">
