@@ -6,6 +6,7 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 
+
 .env
 config/firebase-service-account.json
 # Diagnostic reports (https://nodejs.org/api/report.html)
@@ -277,4 +278,18 @@ scratch/
 backend/scratch/
 test-results/
 frontend/test-results/
+
+# Local video audit frames and temporary scripts
+video*_frames/
+extract_video*.py
+inspect_videos.py
+.qoder/
+
+# Database dumps and local backup artifacts
+*.dump
+*.sql.gz
+backups/
+
+# Local test scratch fixtures
+backend/scratch_staging*
 
