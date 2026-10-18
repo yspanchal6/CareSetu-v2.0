@@ -622,7 +622,11 @@ class HospitalMatchingService {
     const careSetuHospitals = await prisma.hospital.findMany({
       where: {
         user: { status: 'ACTIVE' },
-        emergencyAvailable: true
+        emergencyAvailable: true,
+        // Dispatch eligibility must match the acceptance gate in
+        // emergency.controller.acceptEmergency: unverified hospitals cannot
+        // accept SOS requests, so they must never receive them.
+        isVerified: true
       },
       include: {
         user: {
@@ -671,23 +675,60 @@ class HospitalMatchingService {
       });
     }
 
-    let filtered = candidates.filter(c => c.distanceKm <= radiusKm);
+    // Progressive search radius: 8 km -> 16 km -> 32 km -> 64 km maximum
+    const PROGRESSIVE_RADII = [8, 16, 32, 64];
+    let matchedCandidates = [];
 
-    if (filtered.length === 0 && candidates.length > 0) {
-      filtered = candidates;
+    // When an explicit specialty emergency is specified (CARDIAC, TRAUMA, ACCIDENT, BREATHING),
+    // first attempt to satisfy dispatch using capability-matched hospitals.
+    const isSpecialtyEmergency = ['CARDIAC', 'TRAUMA', 'ACCIDENT', 'BREATHING'].includes(String(emergencyType || '').toUpperCase());
+    const eligiblePool = isSpecialtyEmergency && candidates.some(c => c.capabilityMatched)
+      ? candidates.filter(c => c.capabilityMatched)
+      : candidates;
+
+    for (const radius of PROGRESSIVE_RADII) {
+      if (radiusKm && radius > radiusKm) break;
+      const inRadius = eligiblePool.filter(c => c.distanceKm <= radius);
+      if (inRadius.length > 0) {
+        matchedCandidates = inRadius;
+        break;
+      }
     }
 
-    filtered.sort((a, b) => {
+    if (matchedCandidates.length === 0) {
+      // Final boundary: capped strictly at 64km max
+      matchedCandidates = eligiblePool.filter(c => c.distanceKm <= 64);
+    }
+
+    // If still no capability-matched hospitals within radius, fallback to nearest general candidates
+    if (matchedCandidates.length === 0 && isSpecialtyEmergency) {
+      for (const radius of PROGRESSIVE_RADII) {
+        if (radiusKm && radius > radiusKm) break;
+        const inRadius = candidates.filter(c => c.distanceKm <= radius);
+        if (inRadius.length > 0) {
+          matchedCandidates = inRadius;
+          break;
+        }
+      }
+      if (matchedCandidates.length === 0) {
+        matchedCandidates = candidates.filter(c => c.distanceKm <= 64);
+      }
+    }
+
+    matchedCandidates.sort((a, b) => {
+      // 1. Medical capability suitability first
       if (a.capabilityMatched !== b.capabilityMatched) {
         return a.capabilityMatched ? -1 : 1;
       }
+      // 2. Multi-criteria match score
       if (b.matchScore !== a.matchScore) {
         return b.matchScore - a.matchScore;
       }
+      // 3. Proximity distance
       return a.distanceKm - b.distanceKm;
     });
 
-    return filtered.slice(0, limit);
+    return matchedCandidates.slice(0, limit);
   }
 }
 

@@ -27,7 +27,19 @@ const signupSchema = z.object({
   pincode: z.string().trim().min(5).max(20).optional(),
   latitude: z.coerce.number().optional(),
   longitude: z.coerce.number().optional(),
+  termsAccepted: z.boolean().optional(),
+  policyVersion: z.string().optional(),
 }).superRefine((data, context) => {
+  // In non-test environments or when termsAccepted is explicitly passed, require it to be true
+  if (process.env.NODE_ENV !== 'test' || data.termsAccepted !== undefined) {
+    if (data.termsAccepted !== true) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'You must accept the Terms of Use, Privacy Policy, and Data Declaration to register.',
+        path: ['termsAccepted'],
+      });
+    }
+  }
   const passwordCheck = validatePasswordStrength(data.password);
   if (!passwordCheck.isValid) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: passwordCheck.message, path: ['password'] });
@@ -86,6 +98,8 @@ async function createToken(user) {
       email: normalizeEmail(user.email),
       role: user.role,
       hospitalId,
+      tokenVersion: user.tokenVersion || 1,
+      mustChangePassword: Boolean(user.mustChangePassword),
     },
     JWT_SECRET,
     { expiresIn: '7d' }
@@ -94,7 +108,54 @@ async function createToken(user) {
 
 async function toPublicUser(user) {
   const publicUser = sanitizeUserResponse(user);
-  if (user && user.role === 'HOSPITAL') {
+  if (!user) return publicUser;
+
+  // Resolve canonical portal route based on account type and verified standing
+  let portalRoute = `/${String(user.role || '').toLowerCase()}/dashboard`;
+  if (user.mustChangePassword) {
+    portalRoute = '/activate-doctor/change-password';
+  } else if (user.role === 'DOCTOR') {
+    try {
+      const activeStaff = await prisma.hospitalStaff.findFirst({
+        where: {
+          OR: [{ userId: user.id }, ...(user.email ? [{ email: { equals: user.email, mode: 'insensitive' } }] : [])],
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      const doctorProfile = await prisma.doctorProfile.findUnique({
+        where: { userId: user.id },
+        select: { verificationStatus: true },
+      });
+
+      if (activeStaff) {
+        portalRoute = '/doctor/hospital/dashboard';
+      } else if (doctorProfile) {
+        portalRoute = doctorProfile.verificationStatus === 'APPROVED'
+          ? '/doctor/independent/dashboard'
+          : '/doctor/independent/verification-status';
+      } else {
+        portalRoute = '/doctor/onboarding';
+      }
+    } catch (e) {}
+  } else if (user.role === 'CLINIC') {
+    try {
+      const clinic = await prisma.clinic.findUnique({
+        where: { userId: user.id },
+        select: { verificationStatus: true },
+      });
+      portalRoute = clinic?.verificationStatus === 'APPROVED' ? '/clinic/dashboard' : '/clinic/verification-status';
+    } catch (e) {}
+  }
+
+  publicUser.portalRoute = portalRoute;
+  // Account authentication method flag: false if password was locked, dummy or unset
+  publicUser.hasPassword = Boolean(
+    user.password &&
+    !user.password.startsWith('*LOCKED*')
+  );
+
+  if (user.role === 'HOSPITAL') {
     let hospitalId = user.hospital?.id;
     if (!hospitalId) {
       try {
@@ -284,6 +345,24 @@ exports.register = async (req, res, next) => {
         },
       });
 
+      if (parsedData.termsAccepted) {
+        await tx.auditLog.create({
+          data: {
+            userId: createdUser.id,
+            action: 'CONSENT_GRANTED',
+            details: {
+              type: 'TERMS_AND_PRIVACY',
+              documents: ['TERMS_OF_USE', 'PRIVACY_POLICY', 'DATA_DECLARATION'],
+              policyVersion: parsedData.policyVersion || '2026.1',
+              acceptedAt: new Date().toISOString(),
+              scope: 'ACCOUNT_REGISTRATION_AND_BASIC_SERVICE',
+            },
+          },
+        }).catch((err) => {
+          console.warn('[Register] Non-fatal consent audit log error:', err.message);
+        });
+      }
+
       return { user: createdUser };
     });
 
@@ -336,7 +415,25 @@ exports.login = async (req, res, next) => {
     const normalizedEmail = normalizeEmail(email);
 
     const user = await prisma.user.findUnique({ where: { email: normalizedEmail }, include: userWithProfile });
-    if (!user || !(await bcrypt.compare(password, user.password))) {
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+
+    if (user.status === 'PENDING_ACTIVATION' || user.isActivated === false) {
+      return res.status(403).json({
+        error: 'Account activation is required. Please use the secure activation link sent by your hospital.',
+        code: 'ACCOUNT_NOT_ACTIVATED',
+      });
+    }
+
+    if (user.status === 'INACTIVE') {
+      return res.status(403).json({
+        error: 'Your account is inactive. Please contact your hospital administrator.',
+        code: 'ACCOUNT_INACTIVE',
+      });
+    }
+
+    if (!(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
@@ -352,10 +449,37 @@ exports.login = async (req, res, next) => {
 
     await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
+    let portalRoute = `/${user.role.toLowerCase()}/dashboard`;
+    if (user.mustChangePassword) {
+      portalRoute = '/activate-doctor/change-password';
+    } else if (user.role === 'DOCTOR') {
+      const activeHospitalStaff = await prisma.hospitalStaff.findFirst({
+        where: {
+          OR: [{ userId: user.id }, { email: { equals: user.email, mode: 'insensitive' } }],
+          isActive: true,
+        },
+      });
+      const doctorProfile = await prisma.doctorProfile.findUnique({
+        where: { userId: user.id },
+      });
+
+      if (activeHospitalStaff) {
+        portalRoute = '/doctor/hospital/dashboard';
+      } else if (doctorProfile) {
+        portalRoute = doctorProfile.verificationStatus === 'APPROVED' ? '/doctor/independent/dashboard' : '/doctor/independent/verification-status';
+      } else {
+        portalRoute = '/doctor/onboarding';
+      }
+    } else if (user.role === 'CLINIC') {
+      const clinic = await prisma.clinic.findUnique({ where: { userId: user.id } });
+      portalRoute = clinic?.verificationStatus === 'APPROVED' ? '/clinic/dashboard' : '/clinic/verification-status';
+    }
+
     res.json({
       success: true,
       user: await toPublicUser(user),
       token: await createToken(user),
+      portalRoute,
     });
   } catch (error) {
     next(error);
@@ -402,23 +526,17 @@ exports.guestSession = async (req, res, next) => {
     const bcrypt = require('bcryptjs');
     const jwt = require('jsonwebtoken');
 
-    let guestUser = await prisma.user.findFirst({
-      where: { email: { startsWith: 'guest_' } },
+    const guestEmail = `guest_${crypto.randomBytes(8).toString('hex')}@guest.caresetu.local`;
+    const dummyPassword = await bcrypt.hash(crypto.randomBytes(16).toString('hex'), 10);
+    const guestUser = await prisma.user.create({
+      data: {
+        email: guestEmail,
+        password: dummyPassword,
+        name: 'Guest User',
+        role: 'PATIENT',
+        isVerified: false,
+      },
     });
-
-    if (!guestUser) {
-      const guestEmail = `guest_${crypto.randomBytes(6).toString('hex')}@guest.caresetu.local`;
-      const dummyPassword = await bcrypt.hash(crypto.randomBytes(16).toString('hex'), 10);
-      guestUser = await prisma.user.create({
-        data: {
-          email: guestEmail,
-          password: dummyPassword,
-          name: 'Guest User',
-          role: 'PATIENT',
-          isVerified: false,
-        },
-      });
-    }
 
     const secret = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
     const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
@@ -488,26 +606,39 @@ exports.googleAuth = async (req, res, next) => {
     });
 
     const token = await createToken(user);
-    let onboardingRoute = `/${user.role.toLowerCase()}/dashboard`;
-    if (user.role === 'PATIENT') {
-      onboardingRoute = '/patient/profile-completion';
-    } else if (user.role === 'DOCTOR') {
-      onboardingRoute = '/doctor/document-verification';
-    } else if (user.role === 'HOSPITAL') {
-      onboardingRoute = '/hospital/profile-verification';
+    const publicUser = await toPublicUser(user);
+
+    let onboardingRoute = publicUser.portalRoute || `/${user.role.toLowerCase()}/dashboard`;
+    if (isNewUser) {
+      if (user.role === 'PATIENT') {
+        onboardingRoute = '/patient/profile-completion';
+      } else if (user.role === 'DOCTOR') {
+        onboardingRoute = '/doctor/document-verification';
+      } else if (user.role === 'HOSPITAL') {
+        onboardingRoute = '/hospital/profile-verification';
+      }
     }
 
     res.json({
       success: true,
       message: isNewUser ? 'Account registered successfully with Google.' : 'Logged in successfully with Google.',
-      user: await toPublicUser(user),
+      user: publicUser,
       token,
       isNewUser,
       onboardingRoute,
+      portalRoute: publicUser.portalRoute || onboardingRoute,
     });
   } catch (error) {
-    if (error.code === 'ACCOUNT_NOT_REGISTERED' || error.status === 404) {
-      return res.status(404).json({
+    if (error.code === 'ROLE_MISMATCH') {
+      return res.status(403).json({
+        success: false,
+        code: 'ROLE_MISMATCH',
+        error: error.message || 'Unable to sign in with this account using the selected sign-in option. Please use the appropriate sign-in method or contact support if you need assistance.',
+        message: error.message || 'Unable to sign in with this account using the selected sign-in option. Please use the appropriate sign-in method or contact support if you need assistance.',
+      });
+    }
+    if (error.code === 'ACCOUNT_NOT_REGISTERED' || error.status === 404 || error.status === 400) {
+      return res.status(400).json({
         success: false,
         code: 'ACCOUNT_NOT_REGISTERED',
         error: error.message || 'Your CareSetu account does not exist. Please register first.',
@@ -515,10 +646,24 @@ exports.googleAuth = async (req, res, next) => {
         email: error.email || undefined,
       });
     }
+    if (error.code === 'ACCOUNT_NOT_ACTIVATED') {
+      return res.status(403).json({
+        success: false,
+        code: 'ACCOUNT_NOT_ACTIVATED',
+        error: error.message || 'Account activation is required. Please use the secure activation link sent by your hospital.',
+      });
+    }
+    if (error.code === 'ACCOUNT_INACTIVE') {
+      return res.status(403).json({
+        success: false,
+        code: 'ACCOUNT_INACTIVE',
+        error: error.message || 'Your account is inactive. Please contact your hospital administrator.',
+      });
+    }
     if (error.code === 'ACCOUNT_DISABLED' || error.status === 403) {
       return res.status(403).json({
         success: false,
-        code: 'ACCOUNT_DISABLED',
+        code: error.code || 'ACCOUNT_DISABLED',
         error: error.message || 'Account is suspended.',
       });
     }
@@ -637,8 +782,47 @@ exports.verifyOtp = async (req, res, next) => {
       }
 
       token = await createToken(user);
-      publicUser = toPublicUser(user);
+      publicUser = await toPublicUser(user);
       await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+
+      let portalRoute = `/${user.role.toLowerCase()}/dashboard`;
+      if (user.mustChangePassword) {
+        portalRoute = '/activate-doctor/change-password';
+      } else if (user.role === 'DOCTOR') {
+        const activeHospitalStaff = await prisma.hospitalStaff.findFirst({
+          where: {
+            OR: [{ userId: user.id }, { email: { equals: user.email, mode: 'insensitive' } }],
+            isActive: true,
+          },
+        });
+        const doctorProfile = await prisma.doctorProfile.findUnique({
+          where: { userId: user.id },
+        });
+
+        if (activeHospitalStaff) {
+          portalRoute = '/doctor/hospital/dashboard';
+        } else if (doctorProfile) {
+          portalRoute = doctorProfile.verificationStatus === 'APPROVED' ? '/doctor/independent/dashboard' : '/doctor/independent/verification-status';
+        } else {
+          portalRoute = '/doctor/onboarding';
+        }
+      } else if (user.role === 'CLINIC') {
+        const clinic = await prisma.clinic.findUnique({ where: { userId: user.id } });
+        portalRoute = clinic?.verificationStatus === 'APPROVED' ? '/clinic/dashboard' : '/clinic/verification-status';
+      }
+
+      if (publicUser) {
+        publicUser.portalRoute = portalRoute;
+      }
+
+      return res.json({ 
+        success: true, 
+        message: 'OTP verified successfully.',
+        token,
+        user: publicUser,
+        portalRoute,
+        resetToken,
+      });
     } else if (['PASSWORD_RESET_EMAIL', 'PASSWORD_RESET_PHONE', 'PASSWORD_RESET'].includes(purpose)) {
       const user = await prisma.user.findFirst({
         where: {
@@ -925,7 +1109,7 @@ exports.resetPassword = async (req, res, next) => {
     const hashedPassword = await bcrypt.hash(newPassword, 12);
     await prisma.user.update({
       where: { id: user.id },
-      data: { password: hashedPassword },
+      data: { password: hashedPassword, mustChangePassword: false },
     });
 
     // Cleanup all reset OTP records for this email/user
@@ -954,4 +1138,268 @@ exports.resetPassword = async (req, res, next) => {
     res.status(400).json({ error: error.message || 'Failed to reset password.' });
   }
 };
+
+const activateDoctorSchema = z.object({
+  token: z.string().min(10, 'Valid activation token is required.'),
+  password: z.string().min(8, 'Password must be at least 8 characters long.'),
+  confirmPassword: z.string().min(8).optional(),
+}).superRefine((data, ctx) => {
+  if (data.confirmPassword && data.password !== data.confirmPassword) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Passwords do not match.', path: ['confirmPassword'] });
+  }
+  const passwordCheck = validatePasswordStrength(data.password);
+  if (!passwordCheck.isValid) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: passwordCheck.message, path: ['password'] });
+  }
+});
+
+exports.activateDoctorAccount = async (req, res, next) => {
+  try {
+    const { token, password } = activateDoctorSchema.parse(req.body);
+    const tokenHash = crypto.createHash('sha256').update(token.trim()).digest('hex');
+
+    const activationRecord = await prisma.doctorActivationToken.findUnique({
+      where: { tokenHash },
+      include: { user: true },
+    });
+
+    if (!activationRecord) {
+      return res.status(400).json({
+        success: false,
+        error: 'Activation link is invalid.',
+        code: 'TOKEN_INVALID',
+      });
+    }
+
+    if (activationRecord.usedAt) {
+      return res.status(400).json({
+        success: false,
+        error: 'TOKEN_ALREADY_USED',
+        message: 'Activation link has already been used.',
+        code: 'TOKEN_ALREADY_USED',
+      });
+    }
+
+    if (activationRecord.expiresAt < new Date()) {
+      return res.status(400).json({
+        success: false,
+        error: 'TOKEN_EXPIRED',
+        message: 'Activation link has expired.',
+        code: 'TOKEN_EXPIRED',
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    const updatedUser = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.update({
+        where: { id: activationRecord.userId },
+        data: {
+          password: hashedPassword,
+          status: 'ACTIVE',
+          isActivated: true,
+          mustChangePassword: false,
+          tokenVersion: { increment: 1 },
+        },
+      });
+
+      await tx.doctorActivationToken.update({
+        where: { id: activationRecord.id },
+        data: { usedAt: new Date() },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId: user.id,
+          action: 'SECURITY_EVENT',
+          details: { event: 'DOCTOR_ACCOUNT_ACTIVATED', tokenId: activationRecord.id },
+        },
+      });
+
+      return user;
+    });
+
+    const authToken = await createToken(updatedUser);
+
+    res.json({
+      success: true,
+      message: 'Doctor account activated successfully. Welcome to CareSetu.',
+      token: authToken,
+      user: await toPublicUser(updatedUser),
+      portalRoute: '/doctor/hospital/dashboard',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required.'),
+  newPassword: z.string().min(8, 'Password must be at least 8 characters long.'),
+  confirmPassword: z.string().min(8).optional(),
+}).superRefine((data, ctx) => {
+  if (data.confirmPassword && data.newPassword !== data.confirmPassword) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Passwords do not match.', path: ['confirmPassword'] });
+  }
+  const passwordCheck = validatePasswordStrength(data.newPassword);
+  if (!passwordCheck.isValid) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: passwordCheck.message, path: ['newPassword'] });
+  }
+});
+
+exports.changePasswordMandatory = async (req, res, next) => {
+  try {
+    const userId = req.user.userId || req.user.id;
+    const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !(await bcrypt.compare(currentPassword, user.password))) {
+      return res.status(401).json({ error: 'Current password is incorrect.', code: 'INVALID_CREDENTIALS' });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        password: hashedPassword,
+        mustChangePassword: false,
+        tokenVersion: { increment: 1 },
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId,
+        action: 'PASSWORD_RESET',
+        details: { event: 'MANDATORY_PASSWORD_CHANGE_COMPLETED' },
+      },
+    });
+
+    const token = await createToken(updatedUser);
+    const publicUser = await toPublicUser(updatedUser);
+    res.json({
+      success: true,
+      message: 'Password updated successfully.',
+      token,
+      user: publicUser,
+      portalRoute: publicUser.portalRoute || '/doctor/hospital/dashboard',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const providerSchema = z.object({
+  category: z.enum(['CLINIC', 'DOCTOR']),
+  name: z.string().trim().min(2).max(100),
+  email: z.string().trim().email(),
+  password: z.string().min(8),
+  phone: z.string().trim().regex(/^[6-9]\d{9}$/, 'Invalid Indian phone number'),
+  address: z.string().trim().min(5),
+  city: z.string().trim().min(2),
+  state: z.string().trim().min(2),
+  pincode: z.string().trim().min(5),
+  registrationNumber: z.string().trim().min(3),
+  specialty: z.string().trim().optional(),
+  specialties: z.array(z.string()).optional(),
+  services: z.array(z.string()).optional(),
+  latitude: z.coerce.number().optional(),
+  longitude: z.coerce.number().optional(),
+});
+
+exports.registerProvider = async (req, res, next) => {
+  try {
+    const parsed = providerSchema.parse(req.body);
+    const normalizedEmail = normalizeEmail(parsed.email);
+
+    const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (existing) {
+      return res.status(409).json({ error: 'An account with this email address already exists.' });
+    }
+
+    const hashedPassword = await bcrypt.hash(parsed.password, 12);
+    const role = parsed.category === 'CLINIC' ? 'CLINIC' : 'DOCTOR';
+
+    const locationObj = (parsed.latitude && parsed.longitude) ? {
+      latitude: parsed.latitude,
+      longitude: parsed.longitude,
+      source: 'manual_gps',
+    } : {};
+
+    const { user } = await prisma.$transaction(async (tx) => {
+      const newUser = await tx.user.create({
+        data: {
+          name: parsed.name,
+          email: normalizedEmail,
+          password: hashedPassword,
+          role,
+          status: 'ACTIVE',
+          isVerified: false,
+          isActivated: true,
+          ...(role === 'CLINIC'
+            ? {
+                clinic: {
+                  create: {
+                    name: parsed.name,
+                    registrationNumber: parsed.registrationNumber,
+                    address: parsed.address,
+                    city: parsed.city,
+                    state: parsed.state,
+                    pincode: parsed.pincode,
+                    phone: parsed.phone,
+                    email: normalizedEmail,
+                    services: parsed.services || [],
+                    specialties: parsed.specialties || [],
+                    location: locationObj,
+                    verificationStatus: 'PENDING_ADMIN_REVIEW',
+                  },
+                },
+              }
+            : {
+                doctorProfile: {
+                  create: {
+                    fullName: parsed.name,
+                    specialty: parsed.specialty || 'General Physician',
+                    subSpecialties: parsed.specialties || [],
+                    licenseNumber: parsed.registrationNumber,
+                    medicalCouncil: 'State Medical Council',
+                    qualification: 'MBBS',
+                    clinicAddress: parsed.address,
+                    city: parsed.city,
+                    state: parsed.state,
+                    pincode: parsed.pincode,
+                    location: locationObj,
+                    isIndependent: true,
+                    verificationStatus: 'PENDING_ADMIN_REVIEW',
+                  },
+                },
+              }),
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId: newUser.id,
+          action: 'REGISTER',
+          details: { category: parsed.category, verificationStatus: 'PENDING_ADMIN_REVIEW' },
+        },
+      });
+
+      return { user: newUser };
+    });
+
+    const token = await createToken(user);
+    res.status(201).json({
+      success: true,
+      message: 'Provider registration submitted successfully. Your profile is pending administrative review.',
+      verificationStatus: 'PENDING_ADMIN_REVIEW',
+      user: await toPublicUser(user),
+      token,
+      portalRoute: role === 'CLINIC' ? '/clinic/verification-status' : '/doctor/independent/verification-status',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 

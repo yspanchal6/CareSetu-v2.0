@@ -106,8 +106,8 @@ const initSocket = (server) => {
       console.log(`[Socket] Client ${socket.id} joined room ${uId}`);
     });
 
-    socket.on('disconnect', () => {
-      console.log(`🔌 Client disconnected: ${socket.id}`);
+    socket.on('disconnect', (reason) => {
+      console.log(`🔌 Client disconnected: ${socket.id} (reason: ${reason})`);
     });
   });
 

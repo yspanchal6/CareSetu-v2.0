@@ -18,6 +18,7 @@ class HospitalDirectoryService {
     state = '',
     district = '',
     type = '',
+    category = 'HOSPITALS',
     source = 'ALL',
     sort = 'name_asc'
   }) {
@@ -25,15 +26,25 @@ class HospitalDirectoryService {
     const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
     const skipNum = (pageNum - 1) * limitNum;
 
+    const normalizedCategory = (category || 'HOSPITALS').toUpperCase();
     const isCareSetuType = !type || type === 'ALL' || type.toLowerCase().includes('caresetu');
-    const fetchCareSetu = (source === 'ALL' || source === 'CARESETU_REGISTERED') && isCareSetuType;
-    const fetchGov = source === 'ALL' || source === 'GOVERNMENT_DATA';
+    const fetchHospitals = (normalizedCategory === 'HOSPITALS' || normalizedCategory === 'ALL');
+    const fetchCareSetu = fetchHospitals && (source === 'ALL' || source === 'CARESETU_REGISTERED') && isCareSetuType;
+    const fetchGov = fetchHospitals && (source === 'ALL' || source === 'GOVERNMENT_DATA');
+    const fetchClinics = normalizedCategory === 'CLINICS' || normalizedCategory === 'ALL';
+    const fetchDoctors = normalizedCategory === 'DOCTORS' || normalizedCategory === 'ALL';
 
     let registeredItems = [];
     let registeredTotal = 0;
 
     let govItems = [];
     let govTotal = 0;
+
+    let clinicItems = [];
+    let clinicTotal = 0;
+
+    let doctorItems = [];
+    let doctorTotal = 0;
 
     // 1. Build CareSetu Hospital Query
     if (fetchCareSetu) {
@@ -109,6 +120,61 @@ class HospitalDirectoryService {
           orderBy: { hospitalName: sort === 'name_desc' ? 'desc' : 'asc' }
         }),
         prisma.governmentHealthRecord.count({ where: whereGov })
+      ]);
+    }
+
+    // 3. Build Verified Clinics Query (Strictly APPROVED)
+    if (fetchClinics && normalizedCategory === 'CLINICS') {
+      const whereClinic = {
+        user: { status: 'ACTIVE' },
+        verificationStatus: 'APPROVED'
+      };
+
+      if (state && state !== 'ALL') whereClinic.state = { equals: state, mode: 'insensitive' };
+      if (district && district !== 'ALL') whereClinic.city = { equals: district, mode: 'insensitive' };
+      if (search) {
+        whereClinic.OR = [
+          { name: { contains: search, mode: 'insensitive' } },
+          { address: { contains: search, mode: 'insensitive' } },
+          { city: { contains: search, mode: 'insensitive' } },
+          { state: { contains: search, mode: 'insensitive' } }
+        ];
+      }
+
+      [clinicItems, clinicTotal] = await Promise.all([
+        prisma.clinic.findMany({
+          where: whereClinic,
+          orderBy: { name: sort === 'name_desc' ? 'desc' : 'asc' }
+        }),
+        prisma.clinic.count({ where: whereClinic })
+      ]);
+    }
+
+    // 4. Build Verified Independent Doctors Query (Strictly APPROVED)
+    if (fetchDoctors && normalizedCategory === 'DOCTORS') {
+      const whereDoctor = {
+        user: { status: 'ACTIVE' },
+        verificationStatus: 'APPROVED',
+        isIndependent: true
+      };
+
+      if (state && state !== 'ALL') whereDoctor.state = { equals: state, mode: 'insensitive' };
+      if (district && district !== 'ALL') whereDoctor.city = { equals: district, mode: 'insensitive' };
+      if (search) {
+        whereDoctor.OR = [
+          { fullName: { contains: search, mode: 'insensitive' } },
+          { specialty: { contains: search, mode: 'insensitive' } },
+          { clinicAddress: { contains: search, mode: 'insensitive' } },
+          { city: { contains: search, mode: 'insensitive' } }
+        ];
+      }
+
+      [doctorItems, doctorTotal] = await Promise.all([
+        prisma.doctorProfile.findMany({
+          where: whereDoctor,
+          orderBy: { fullName: sort === 'name_desc' ? 'desc' : 'asc' }
+        }),
+        prisma.doctorProfile.count({ where: whereDoctor })
       ]);
     }
 
@@ -218,10 +284,77 @@ class HospitalDirectoryService {
       };
     });
 
+    const normalizedClinics = clinicItems.map(c => {
+      const coords = coordinates(c.location);
+      return {
+        id: c.id,
+        sourceType: 'CLINIC',
+        source: 'CARESETU',
+        sourceRecordId: c.id,
+        hospitalName: c.name,
+        hospitalType: 'Licensed Clinic',
+        category: 'CLINICS',
+        state: c.state || 'N/A',
+        district: c.city || 'N/A',
+        address: c.address,
+        pincode: c.pincode,
+        latitude: coords ? coords.latitude : null,
+        longitude: coords ? coords.longitude : null,
+        phone: c.phone || null,
+        email: c.email || null,
+        isVerified: true,
+        emergencyAvailable: false,
+        capabilities: c.services || [],
+        specialties: c.specialties || [],
+        operatingHours: c.operatingHours || null,
+        bedCount: null,
+        admissionData: null,
+        licenseInfo: `Reg #${c.registrationNumber}`,
+        updatedAt: c.updatedAt,
+      };
+    });
+
+    const normalizedDoctors = doctorItems.map(d => {
+      const coords = coordinates(d.location);
+      return {
+        id: d.id,
+        sourceType: 'DOCTOR',
+        source: 'CARESETU',
+        sourceRecordId: d.id,
+        hospitalName: `Dr. ${d.fullName}`,
+        hospitalType: d.specialty || 'Independent Practitioner',
+        category: 'DOCTORS',
+        state: d.state || 'N/A',
+        district: d.city || 'N/A',
+        address: d.clinicAddress || 'Private Practice',
+        pincode: d.pincode,
+        latitude: coords ? coords.latitude : null,
+        longitude: coords ? coords.longitude : null,
+        phone: null,
+        email: null,
+        isVerified: true,
+        emergencyAvailable: false,
+        capabilities: [d.specialty, ...(d.subSpecialties || [])],
+        specialties: [d.specialty, ...(d.subSpecialties || [])],
+        qualification: d.qualification,
+        experienceYears: d.experienceYears,
+        bedCount: null,
+        admissionData: null,
+        licenseInfo: `License #${d.licenseNumber} (${d.medicalCouncil})`,
+        updatedAt: d.updatedAt,
+      };
+    });
+
     let combined = [];
     let totalCount = 0;
 
-    if (source === 'CARESETU_REGISTERED') {
+    if (normalizedCategory === 'CLINICS') {
+      combined = normalizedClinics;
+      totalCount = clinicTotal;
+    } else if (normalizedCategory === 'DOCTORS') {
+      combined = normalizedDoctors;
+      totalCount = doctorTotal;
+    } else if (source === 'CARESETU_REGISTERED') {
       combined = normalizedRegistered;
       totalCount = registeredTotal;
     } else if (source === 'GOVERNMENT_DATA') {
@@ -229,8 +362,8 @@ class HospitalDirectoryService {
       totalCount = govTotal;
     } else {
       // Combined ALL sources
-      combined = [...normalizedRegistered, ...normalizedGov];
-      totalCount = registeredTotal + govTotal;
+      combined = [...normalizedRegistered, ...normalizedGov, ...normalizedClinics, ...normalizedDoctors];
+      totalCount = registeredTotal + govTotal + clinicTotal + doctorTotal;
     }
 
     // Apply global sorting across combined list

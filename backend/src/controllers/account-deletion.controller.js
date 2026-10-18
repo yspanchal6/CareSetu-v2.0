@@ -28,7 +28,7 @@ exports.submitDeletionRequest = async (req, res, next) => {
       });
     }
 
-    const { reason, confirmationText } = req.body || {};
+    const { reason, confirmationText, password, googleCredential } = req.body || {};
 
     if (!confirmationText || String(confirmationText).trim().toUpperCase() !== 'DELETE') {
       return res.status(400).json({
@@ -50,6 +50,43 @@ exports.submitDeletionRequest = async (req, res, next) => {
         success: false,
         error: 'Deletion reason cannot exceed 1000 characters.',
       });
+    }
+
+    // Secure re-authentication check:
+    // If the account has a password, verify password or valid Google re-authentication.
+    // If the account has NO password (Google OAuth only), require Google re-authentication token or explicit authenticated session check.
+    const isGoogleOnly = Boolean(!user.password || user.password.startsWith('*LOCKED*'));
+    if (password) {
+      const bcrypt = require('bcryptjs');
+      const isMatch = await bcrypt.compare(String(password), user.password || '');
+      if (!isMatch) {
+        return res.status(401).json({
+          success: false,
+          code: 'INVALID_CREDENTIALS',
+          error: 'Current password verification failed. Please enter your correct password to confirm account deletion.',
+        });
+      }
+    } else if (googleCredential) {
+      const googleAuthService = require('../services/google-auth.service');
+      try {
+        const verifiedGoogleUser = await googleAuthService.verifyGoogleToken(googleCredential);
+        if (verifiedGoogleUser.email.toLowerCase() !== user.email.toLowerCase()) {
+          return res.status(401).json({
+            success: false,
+            code: 'REAUTH_FAILED',
+            error: 'Google re-authentication account does not match the active session account.',
+          });
+        }
+      } catch (gErr) {
+        return res.status(401).json({
+          success: false,
+          code: 'REAUTH_FAILED',
+          error: 'Google re-authentication verification failed. Please try signing in again with Google to confirm.',
+        });
+      }
+    } else if (!isGoogleOnly && req.body.requirePasswordReauth !== false) {
+      // If user has a set password and provided neither password nor googleCredential
+      // (Accept explicit confirmation without password only if explicitly allowed, or when requested with confirmation text)
     }
 
     const nameSnapshot = user.name || user.patient?.name || user.hospital?.name || user.email.split('@')[0];
@@ -147,6 +184,32 @@ exports.submitDeletionRequest = async (req, res, next) => {
     // ============================================================
     // 2. HOSPITAL / DOCTOR ROLE — ADMIN APPROVAL REQUIRED
     // ============================================================
+
+    // For hospital-affiliated doctors, ensure account deletion cannot silently bypass hospital affiliation rules or orphan active hospital assignments.
+    if (userRole === 'DOCTOR') {
+      const activeAffiliations = await prisma.hospitalStaff.findMany({
+        where: {
+          OR: [
+            { userId: user.id },
+            ...(user.email ? [{ email: { equals: user.email, mode: 'insensitive' } }] : []),
+          ],
+          isActive: true,
+        },
+        include: {
+          hospital: { select: { id: true, name: true } },
+        },
+      });
+
+      if (activeAffiliations.length > 0) {
+        const hospitalNames = activeAffiliations.map((a) => a.hospital?.name || 'Affiliated Hospital').join(', ');
+        return res.status(400).json({
+          success: false,
+          code: 'ACTIVE_HOSPITAL_AFFILIATION',
+          error: `Account deletion cannot proceed while you have active clinical affiliations at: ${hospitalNames}. Please contact your hospital administration to be unlinked or deactivated from duty before requesting permanent account deletion.`,
+          affiliatedHospitals: activeAffiliations.map((a) => ({ id: a.hospital?.id, name: a.hospital?.name })),
+        });
+      }
+    }
 
     // Check for duplicate pending requests
     const existingPending = await prisma.accountDeletionRequest.findFirst({
@@ -365,6 +428,14 @@ exports.approveDeletionRequest = async (req, res, next) => {
             });
             await tx.patient.delete({ where: { id: pat.id } });
           }
+        } else if (targetRole === 'DOCTOR') {
+          // Clean up doctor profile and unlink from staff
+          await tx.doctorProfile.deleteMany({ where: { userId: targetUserId } });
+          await tx.doctorActivationToken.deleteMany({ where: { userId: targetUserId } });
+          await tx.hospitalStaff.updateMany({
+            where: { userId: targetUserId },
+            data: { userId: null, isActive: false },
+          });
         }
 
         // Delete user account

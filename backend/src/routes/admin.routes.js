@@ -21,6 +21,13 @@ router.post('/hospitals/register', controller.registerHospital);
 router.post('/hospitals/:id/approve', controller.approveHospital);
 router.post('/hospitals/:id/reject', controller.rejectHospital);
 
+// Provider Credential Verification (Independent Doctors & Clinics)
+router.get('/providers/pending', controller.getPendingProviders);
+router.get('/providers', controller.getPendingProviders);
+router.post('/providers/:id/review', controller.reviewProvider);
+router.put('/providers/:id/review', controller.reviewProvider);
+router.get('/providers/:id/documents/:docId', controller.getProviderDocument);
+
 // Account Deletion Requests
 router.get('/account-deletion-requests', deletionController.getAdminDeletionRequests);
 router.post('/account-deletion-requests/:id/approve', deletionController.approveDeletionRequest);

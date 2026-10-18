@@ -109,7 +109,7 @@ const getCaseHealthPack = async (req, res, next) => {
         data,
       });
     } catch (authError) {
-      if (authError.message.includes('Unauthorized') || authError.message.includes('expired')) {
+      if (authError.message.includes('Unauthorized') || authError.message.includes('expired') || authError.message.includes('closed') || authError.message.includes('concluded')) {
         return res.status(403).json({ success: false, error: authError.message });
       }
       if (authError.message.includes('not found')) {

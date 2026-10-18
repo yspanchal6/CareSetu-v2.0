@@ -37,6 +37,7 @@ export const hospitalNav: NavItem[] = [
 
 export const doctorNav: NavItem[] = [
   { to: "/doctor/dashboard", label: "Dashboard", key: "nav.dashboard", icon: LayoutDashboard },
+  { to: "/doctor/profile", label: "Profile", key: "nav.profile", icon: User },
   { to: "/doctor/cases", label: "Assigned Cases", key: "nav.assignedCases", icon: ClipboardList },
   { to: "/doctor/patients", label: "Patients", key: "nav.patients", icon: Users },
   { to: "/doctor/health-pack", label: "Health Pack", key: "nav.healthPack", icon: ShieldCheck },
@@ -45,10 +46,38 @@ export const doctorNav: NavItem[] = [
   { to: "/doctor/settings", label: "Settings", key: "nav.settings", icon: Settings },
 ];
 
+export const hospitalDoctorNav: NavItem[] = [
+  { to: "/doctor/hospital/dashboard", label: "Hospital Dashboard", key: "nav.hospitalDoctorDashboard", icon: LayoutDashboard },
+  { to: "/doctor/hospital/cases", label: "Emergency Cases", key: "nav.hospitalDoctorCases", icon: Siren },
+  { to: "/doctor/hospital/health-pack", label: "Health Pack Access", key: "nav.healthPack", icon: ShieldCheck },
+  { to: "/doctor/hospital/profile", label: "Affiliation & Duty", key: "nav.hospitalDoctorProfile", icon: UserCog },
+  { to: "/doctor/hospital/settings", label: "Settings", key: "nav.settings", icon: Settings },
+];
+
+export const independentDoctorNav: NavItem[] = [
+  { to: "/doctor/independent/dashboard", label: "Practice Dashboard", key: "nav.independentDoctorDashboard", icon: LayoutDashboard },
+  { to: "/doctor/independent/profile", label: "Doctor Profile", key: "nav.profile", icon: User },
+  { to: "/doctor/independent/services", label: "Outpatient Services", key: "nav.outpatientServices", icon: Stethoscope },
+  { to: "/doctor/independent/appointments", label: "Appointments", key: "nav.appointments", icon: CalendarDays },
+  { to: "/doctor/independent/verification-status", label: "Verification Status", key: "nav.verificationStatus", icon: ShieldCheck },
+  { to: "/doctor/independent/settings", label: "Settings", key: "nav.settings", icon: Settings },
+];
+
+export const clinicNav: NavItem[] = [
+  { to: "/clinic/dashboard", label: "Clinic Dashboard", key: "nav.clinicDashboard", icon: LayoutDashboard },
+  { to: "/clinic/profile", label: "Clinic Profile", key: "nav.clinicProfile", icon: Building2 },
+  { to: "/clinic/services", label: "Clinical Services", key: "nav.clinicServices", icon: Stethoscope },
+  { to: "/clinic/staff", label: "Medical Staff", key: "nav.clinicStaff", icon: Users },
+  { to: "/clinic/verification-status", label: "Verification Status", key: "nav.verificationStatus", icon: ShieldCheck },
+  { to: "/clinic/settings", label: "Settings", key: "nav.settings", icon: Settings },
+];
+
 export const adminNav: NavItem[] = [
   { to: "/admin/dashboard", label: "Dashboard", key: "nav.dashboard", icon: LayoutDashboard },
+  { to: "/admin/provider-reviews", label: "Provider Verification", key: "nav.providerReviews", icon: ShieldCheck },
   { to: "/admin/users", label: "Users", key: "nav.users", icon: Users },
   { to: "/admin/hospitals", label: "Hospitals", key: "nav.hospitals", icon: Building2 },
+  { to: "/admin/appeals", label: "Hospital Appeals", key: "nav.hospitalAppeals", icon: ShieldCheck },
   { to: "/admin/security-reviews", label: "Security Reviews", key: "nav.securityReviews", icon: ShieldAlert },
   { to: "/admin/emergencies", label: "Emergencies", key: "nav.emergencyCases", icon: Siren },
   { to: "/admin/hospital-registry", label: "Hospital Registry", key: "nav.hospitalRegistry", icon: Hospital },
@@ -65,5 +94,6 @@ export const roleLabels: Record<string, string> = {
   patient: "Patient Portal",
   hospital: "Hospital Portal",
   doctor: "Doctor Portal",
+  clinic: "Clinic Portal",
   admin: "Admin Console",
 };

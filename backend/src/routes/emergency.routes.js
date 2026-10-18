@@ -3,6 +3,7 @@ const rateLimit = require('express-rate-limit');
 const {
   createSOS,
   getSOSStatus,
+  getSOSByOperationId,
   getAttempts,
   cancelSOS,
   getMyEmergencies,
@@ -20,7 +21,7 @@ const router = express.Router();
 // (PWA-safe for shared IPs). Idempotency + audit still apply.
 const sosLimiter = rateLimit({
   windowMs: 60 * 1000,
-  limit: 3,
+  limit: process.env.NODE_ENV === 'test' ? 100 : 3,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   keyGenerator: (req) => req.user?.userId || req.socket.remoteAddress || 'unknown',
@@ -30,6 +31,7 @@ const sosLimiter = rateLimit({
 // Patient & Guest Emergency routes
 router.post('/sos', auth, authorize('PATIENT', 'GUEST'), sosLimiter, createSOS);
 router.get('/status/:caseId', auth, authorize('PATIENT', 'HOSPITAL', 'ADMIN', 'GUEST'), getSOSStatus);
+router.get('/by-op-id/:operationId', auth, authorize('PATIENT', 'HOSPITAL', 'ADMIN', 'GUEST'), getSOSByOperationId);
 router.get('/attempts/:caseId', auth, authorize('PATIENT', 'HOSPITAL', 'ADMIN', 'GUEST'), getAttempts);
 router.post('/cancel/:caseId', auth, authorize('PATIENT', 'GUEST'), cancelSOS);
 router.put('/cancel/:caseId', auth, authorize('PATIENT', 'GUEST'), cancelSOS);

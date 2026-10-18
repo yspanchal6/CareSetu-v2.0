@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
-import { User, Building2, Stethoscope, ShieldCheck, Check, Mail, Phone, AlertCircle, CheckCircle2 } from "lucide-react";
+import { User, Building2, Stethoscope, ShieldCheck, Check, Mail, Phone, AlertCircle, CheckCircle2, KeyRound } from "lucide-react";
 import { Input, Select } from "../../components/common/Input";
 import { PasswordInput } from "../../components/common/PasswordInput";
 import Button from "../../components/common/Button";
@@ -63,11 +63,11 @@ export function RegisterPage() {
   const [searchParams] = useSearchParams();
   const { setSession } = useAuth();
   const { showToast } = useToast();
-  
+
   const role = searchParams.get("role") === "hospital" ? "hospital" : searchParams.get("role") === "doctor" ? "doctor" : "patient";
   const [step, setStep] = useState<"form" | "phone_otp" | "email_otp">("form");
   const [mockMode, setMockMode] = useState(false);
-  
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -79,6 +79,7 @@ export function RegisterPage() {
   const [pincode, setPincode] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isShake, setIsShake] = useState(false);
 
@@ -91,7 +92,7 @@ export function RegisterPage() {
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
   const [useManualCoords, setUseManualCoords] = useState(false);
-  
+
   const [resendTimer, setResendTimer] = useState(30);
   const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(0);
@@ -288,6 +289,13 @@ export function RegisterPage() {
       return;
     }
 
+    if (!termsAccepted) {
+      setIsShake(true);
+      setTimeout(() => setIsShake(false), 600);
+      showToast("error", "You must accept the Terms of Use, Privacy Policy, and Data Declaration to register.");
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await authApi.signup({
@@ -296,6 +304,8 @@ export function RegisterPage() {
         password,
         phone,
         role: role === "patient" ? "PATIENT" : role === "hospital" ? "HOSPITAL" : "DOCTOR",
+        termsAccepted: true,
+        policyVersion: "2026.1",
         ...(role === "patient"
           ? { age: Number(age), gender }
           : role === "hospital"
@@ -307,9 +317,10 @@ export function RegisterPage() {
       });
 
       if (res.user && res.token) {
+        const nextRoute = res.user.portalRoute || (role === "patient" ? "/patient/dashboard" : role === "hospital" ? "/hospital/dashboard" : "/doctor/onboarding");
         await setSession(res.user, res.token);
-        showToast("success", "Account created successfully! Please complete document verification.");
-        navigate("/verify-documents");
+        showToast("success", role === "doctor" ? "Account created successfully. Completing your doctor onboarding flow." : "Account created successfully! Please complete document verification.");
+        navigate(nextRoute, { replace: true });
       }
     } catch (error) {
       setIsShake(true);
@@ -423,7 +434,7 @@ export function RegisterPage() {
             ? "OTP expired"
             : `Expires in ${Math.floor(secondsLeft / 60)}:${(secondsLeft % 60).toString().padStart(2, "0")}`}
         </p>
-        
+
         <div className="text-center mt-6">
           <button
             type="button"
@@ -477,7 +488,7 @@ export function RegisterPage() {
 
       <form className="flex flex-col gap-4" onSubmit={handleRegister}>
         <Input label={role === "hospital" ? "Hospital name" : "Full name"} placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} required />
-        
+
         <div>
           <div className="flex justify-between items-center mb-1.5">
             <label className="block text-sm font-semibold text-navy">Email</label>
@@ -490,11 +501,10 @@ export function RegisterPage() {
                 type="button"
                 onClick={handleStartEmailVerification}
                 disabled={loading || !email.includes("@")}
-                className={`text-xs font-bold px-2.5 py-1 rounded-lg border transition-colors ${
-                  email.includes("@")
+                className={`text-xs font-bold px-2.5 py-1 rounded-lg border transition-colors ${email.includes("@")
                     ? "bg-sky/10 border-sky/30 text-sky hover:bg-sky/20 cursor-pointer"
                     : "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
-                }`}
+                  }`}
               >
                 Verify Email
               </button>
@@ -525,11 +535,10 @@ export function RegisterPage() {
                 type="button"
                 onClick={handleStartPhoneVerification}
                 disabled={loading || phone.length !== 10}
-                className={`text-xs font-bold px-2.5 py-1 rounded-lg border transition-colors ${
-                  phone.length === 10
+                className={`text-xs font-bold px-2.5 py-1 rounded-lg border transition-colors ${phone.length === 10
                     ? "bg-sky/10 border-sky/30 text-sky hover:bg-sky/20 cursor-pointer"
                     : "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
-                }`}
+                  }`}
               >
                 Verify Number
               </button>
@@ -616,10 +625,34 @@ export function RegisterPage() {
           isShake={isShake}
           autoComplete="new-password"
         />
-        <label className="flex items-start gap-2 text-xs text-text-secondary">
-          <input type="checkbox" required className="mt-0.5" />
-          I agree to the CareSetu <Link to="#" className="text-sky font-medium">Privacy Policy</Link>
-        </label>
+        <div className="pt-1">
+          <label className="flex items-start gap-2.5 text-xs text-text-secondary cursor-pointer select-none">
+            <input
+              type="checkbox"
+              id="termsAcceptedCheckbox"
+              name="termsAccepted"
+              checked={termsAccepted}
+              onChange={(e) => setTermsAccepted(e.target.checked)}
+              required
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-sky focus:ring-sky/30 cursor-pointer"
+            />
+            <span className="leading-relaxed">
+              I have read and agree to the CareSetu{" "}
+              <Link to="/terms" target="_blank" rel="noopener noreferrer" className="text-sky font-semibold hover:underline">
+                Terms of Use
+              </Link>
+              ,{" "}
+              <Link to="/privacy" target="_blank" rel="noopener noreferrer" className="text-sky font-semibold hover:underline">
+                Privacy Policy
+              </Link>
+              , and{" "}
+              <Link to="/data-declaration" target="_blank" rel="noopener noreferrer" className="text-sky font-semibold hover:underline">
+                Data Declaration
+              </Link>
+              .
+            </span>
+          </label>
+        </div>
         <Button type="submit" variant="primary" fullWidth loading={loading}>
           Register
         </Button>
@@ -953,17 +986,16 @@ export function ForgotPasswordPage() {
             type="button"
             onClick={handleResendOtp}
             disabled={resendTimer > 0 || loading}
-            className={`text-sm font-semibold transition-colors ${
-              resendTimer > 0 || loading
+            className={`text-sm font-semibold transition-colors ${resendTimer > 0 || loading
                 ? "text-slate-400 cursor-not-allowed"
                 : "text-sky hover:underline cursor-pointer"
-            }`}
+              }`}
           >
             {resendTimer > 0
               ? `Resend OTP in ${resendTimer}s`
               : otpExpired
-              ? "Get New OTP"
-              : "Resend OTP"}
+                ? "Get New OTP"
+                : "Resend OTP"}
           </button>
         </div>
       </div>
@@ -1014,11 +1046,10 @@ export function ForgotPasswordPage() {
                 aria-required="true"
                 aria-invalid={!!fieldError}
                 aria-describedby={fieldError ? "email-error-msg" : undefined}
-                className={`w-full px-4 py-2.5 rounded-xl border text-sm bg-white placeholder:text-slate-400 focus:outline-none transition-all duration-200 ${
-                  fieldError
+                className={`w-full px-4 py-2.5 rounded-xl border text-sm bg-white placeholder:text-slate-400 focus:outline-none transition-all duration-200 ${fieldError
                     ? "border-red-400 focus:ring-2 focus:ring-red-400/30 focus:border-red-500 shadow-sm shadow-red-100"
                     : "border-slate-200 focus:ring-4 focus:ring-sky-500/15 focus:border-sky-500 hover:border-slate-300"
-                }`}
+                  }`}
               />
             </div>
             {fieldError && (
@@ -1053,11 +1084,10 @@ export function ForgotPasswordPage() {
                 maxLength={10}
                 pattern="^[6-9]\d{9}$"
                 title="Please enter a valid 10-digit Indian phone number starting with 6-9"
-                className={`w-full pl-12 pr-4 py-2.5 rounded-xl border text-sm bg-white placeholder:text-slate-400 focus:outline-none transition-all duration-200 ${
-                  fieldError
+                className={`w-full pl-12 pr-4 py-2.5 rounded-xl border text-sm bg-white placeholder:text-slate-400 focus:outline-none transition-all duration-200 ${fieldError
                     ? "border-red-400 focus:ring-2 focus:ring-red-400/30 focus:border-red-500 shadow-sm shadow-red-100"
                     : "border-slate-200 focus:ring-4 focus:ring-sky-500/15 focus:border-sky-500 hover:border-slate-300"
-                }`}
+                  }`}
               />
             </div>
             {fieldError && (
@@ -1212,3 +1242,217 @@ export function ResetPasswordPage() {
     </div>
   );
 }
+
+export function DoctorActivationPage() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { showToast } = useToast();
+  const token = searchParams.get("token") || "";
+
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [activated, setActivated] = useState(false);
+
+  if (!token) {
+    return (
+      <div className="text-center py-8">
+        <AlertCircle className="w-12 h-12 text-rose-500 mx-auto mb-3" />
+        <h2 className="text-xl font-bold text-navy">Invalid Activation Link</h2>
+        <p className="text-sm text-text-secondary mt-2 mb-6">
+          The activation token is missing or malformed. Please contact your hospital administrator for a new invite.
+        </p>
+        <Link to="/login" className="text-sky font-semibold hover:underline">
+          Return to Login
+        </Link>
+      </div>
+    );
+  }
+
+  if (activated) {
+    return (
+      <div className="text-center py-8">
+        <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
+        <h2 className="text-xl font-bold text-navy">Account Activated!</h2>
+        <p className="text-sm text-text-secondary mt-2 mb-6">
+          Your hospital doctor account has been successfully secured. You can now log in.
+        </p>
+        <Button variant="primary" onClick={() => navigate("/login")}>
+          Proceed to Login
+        </Button>
+      </div>
+    );
+  }
+
+  const handleActivate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password.length < 8) {
+      showToast("error", "Password must be at least 8 characters.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      showToast("error", "Passwords do not match.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await authApi.activateDoctor({ token, password });
+      if (res.success) {
+        setActivated(true);
+        showToast("success", "Account activated successfully!");
+      }
+    } catch (err: any) {
+      showToast("error", err.message || "Failed to activate account. The token may be expired or already used.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="py-4">
+      <div className="text-center mb-6">
+        <Stethoscope className="w-10 h-10 text-sky mx-auto mb-2" />
+        <h2 className="text-2xl font-extrabold text-navy">Activate Doctor Account</h2>
+        <p className="text-sm text-text-secondary mt-1">
+          Set up your secure password to complete hospital clinical onboarding.
+        </p>
+      </div>
+
+      <form onSubmit={handleActivate} className="flex flex-col gap-4 text-left">
+        <PasswordInput
+          label="Create secure password"
+          value={password}
+          onChange={setPassword}
+          placeholder="At least 8 characters (Uppercase, number, special)"
+          required
+          showStrengthIndicator={true}
+          showChecklist={true}
+          autoComplete="new-password"
+        />
+        <PasswordInput
+          label="Confirm password"
+          value={confirmPassword}
+          onChange={setConfirmPassword}
+          placeholder="Confirm secure password"
+          required
+          confirmValue={password}
+          showConfirmMatching={true}
+          autoComplete="new-password"
+        />
+        <Button type="submit" variant="primary" fullWidth loading={loading}>
+          Activate & Secure Account
+        </Button>
+      </form>
+    </div>
+  );
+}
+
+export function MandatoryPasswordChangePage() {
+  const navigate = useNavigate();
+  const { showToast } = useToast();
+  const { user, login, setSession } = useAuth();
+
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [isShake, setIsShake] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword.length < 8) {
+      showToast("error", "New password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showToast("error", "New passwords do not match.");
+      return;
+    }
+
+    setLoading(true);
+    setIsShake(false);
+    try {
+      const res = await authApi.changePasswordMandatory({
+        currentPassword,
+        newPassword,
+        confirmPassword,
+      });
+
+      if (res && res.success) {
+        showToast("success", "Password updated successfully! Welcome to CareSetu.");
+        if (res.token && res.user) {
+          await setSession(res.user, res.token);
+        }
+        const nextRoute = res.user?.portalRoute || (user?.role === "doctor" ? "/doctor/hospital/dashboard" : `/${user?.role?.toLowerCase() || "doctor"}/dashboard`);
+        navigate(nextRoute, { replace: true });
+      } else {
+        throw new Error(res?.message || "Failed to update password.");
+      }
+    } catch (err: any) {
+      setIsShake(true);
+      setTimeout(() => setIsShake(false), 600);
+      showToast("error", err?.message || "Current password incorrect or update failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="py-4">
+      <div className="text-center mb-6">
+        <KeyRound className="w-10 h-10 text-sky mx-auto mb-2" />
+        <h2 className="text-2xl font-extrabold text-navy">Set Permanent Password</h2>
+        <p className="text-sm text-text-secondary mt-1">
+          Your account was provisioned with a temporary password. Please set a permanent confidential password to continue to your dashboard.
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-left">
+        <div>
+          <label className="block text-xs font-semibold text-text-secondary mb-1">
+            Current / Temporary Password *
+          </label>
+          <input
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            placeholder="Enter the temporary password you logged in with"
+            required
+            autoComplete="current-password"
+            className="w-full text-xs p-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky/40 focus:border-sky outline-none transition-all"
+          />
+        </div>
+
+        <PasswordInput
+          label="New permanent password *"
+          value={newPassword}
+          onChange={setNewPassword}
+          placeholder="At least 8 characters (Uppercase, number, special)"
+          required
+          showStrengthIndicator={true}
+          showChecklist={true}
+          isShake={isShake}
+          autoComplete="new-password"
+        />
+
+        <PasswordInput
+          label="Confirm permanent password *"
+          value={confirmPassword}
+          onChange={setConfirmPassword}
+          placeholder="Confirm new permanent password"
+          required
+          confirmValue={newPassword}
+          showConfirmMatching={true}
+          isShake={isShake}
+          autoComplete="new-password"
+        />
+
+        <Button type="submit" variant="primary" fullWidth loading={loading} className="mt-2">
+          Update Password & Enter Dashboard
+        </Button>
+      </form>
+    </div>
+  );
+}
+

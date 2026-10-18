@@ -154,7 +154,42 @@ class HealthPackService {
 
     return updated;
   }
-  async shareHealthPackWithHospital(patientId, hospitalId, hospitalUserId) {
+
+  async resolveUserHospitalId(userId, role) {
+    if (!userId) return null;
+    if (role === 'HOSPITAL') {
+      const hosp = await prisma.hospital.findFirst({ where: { userId } });
+      return hosp?.id || null;
+    }
+    if (role === 'DOCTOR') {
+      const userObj = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+      const staff = await prisma.hospitalStaff.findFirst({
+        where: {
+          OR: [
+            ...(userObj?.email ? [{ email: { equals: userObj.email, mode: 'insensitive' } }] : []),
+            { id: userId },
+          ],
+          isActive: true,
+        },
+        select: { hospitalId: true },
+      });
+      if (staff?.hospitalId) return staff.hospitalId;
+
+      const hosp = await prisma.hospital.findFirst({
+        where: {
+          OR: [
+            { userId },
+            ...(userObj?.email ? [{ email: { equals: userObj.email, mode: 'insensitive' } }] : []),
+          ],
+        },
+        select: { id: true },
+      });
+      return hosp?.id || null;
+    }
+    return null;
+  }
+
+  async shareHealthPackWithHospital(patientId, hospitalId, hospitalUserId, baseTimestamp = null) {
     let healthPack = await prisma.healthPack.findFirst({
       where: { patientId, status: 'ACTIVE' },
       orderBy: { createdAt: 'desc' },
@@ -175,41 +210,43 @@ class HealthPackService {
       healthPack = await this.createHealthPack(patientId, initialData);
     }
 
+    const whereClause = hospitalId
+      ? { healthPackId: healthPack.id, sharedWithHospitalId: hospitalId }
+      : { healthPackId: healthPack.id, sharedWithUserId: hospitalUserId };
+
     const existingShare = await prisma.healthPackShare.findFirst({
-      where: {
-        healthPackId: healthPack.id,
-        sharedWithHospitalId: hospitalId,
-      },
+      where: whereClause,
     });
 
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + 24);
+    // Authoritative calculation: baseTimestamp (e.g. acceptedAt / createdAt) + 24 hours
+    const baseDate = baseTimestamp ? new Date(baseTimestamp) : new Date();
+    const newExpiresAt = new Date(baseDate.getTime() + 24 * 60 * 60 * 1000);
 
     if (existingShare) {
-      // If active and not expired, return existing share
-      if (existingShare.status === 'ACTIVE' && (!existingShare.expiresAt || new Date(existingShare.expiresAt) > new Date())) {
-        return existingShare;
+      if (baseTimestamp || (existingShare.expiresAt && new Date(existingShare.expiresAt) <= new Date()) || existingShare.status !== 'ACTIVE') {
+        const updatedShare = await prisma.healthPackShare.update({
+          where: { id: existingShare.id },
+          data: {
+            expiresAt: newExpiresAt,
+            status: 'ACTIVE',
+            consentGranted: true,
+            sharedAt: baseDate,
+          },
+        });
+        return updatedShare;
       }
-      // Otherwise renew the share
-      return await prisma.healthPackShare.update({
-        where: { id: existingShare.id },
-        data: {
-          expiresAt,
-          status: 'ACTIVE',
-          sharedWithUserId: hospitalUserId || existingShare.sharedWithUserId,
-          consentGranted: true,
-        },
-      });
+      return existingShare;
     }
 
     const share = await prisma.healthPackShare.create({
       data: {
         healthPackId: healthPack.id,
-        sharedWithHospitalId: hospitalId,
+        sharedWithHospitalId: hospitalId || null,
         sharedWithUserId: hospitalUserId,
         consentGranted: true,
-        expiresAt,
+        expiresAt: newExpiresAt,
         status: 'ACTIVE',
+        sharedAt: baseDate,
       },
     });
 
@@ -217,15 +254,9 @@ class HealthPackService {
   }
 
   /**
-   * Decrypts and retrieves a HealthPack for an authorized hospital using caseId.
+   * Decrypts and retrieves a HealthPack for an authorized hospital or doctor using caseId.
    */
-  async getDecryptedHealthPackForCase(caseId, hospitalUserId, userRole = 'HOSPITAL') {
-    const hospital = await prisma.hospital.findFirst({ where: { userId: hospitalUserId } });
-    if (!hospital) {
-      throw new Error('Hospital profile not found.');
-    }
-
-    // Find EmergencyCase by caseId or public caseId
+  async getDecryptedHealthPackForCase(caseId, requestingUserId, userRole = 'HOSPITAL') {
     const emergencyCase = await prisma.emergencyCase.findFirst({
       where: { OR: [{ id: caseId }, { caseId }] },
     });
@@ -234,24 +265,93 @@ class HealthPackService {
       throw new Error('Emergency case not found.');
     }
 
-    // Authorization check: Verify hospital is assigned or requested for this case
-    const isAssignedHospital = emergencyCase.hospitalId === hospital.id;
-    let isRequestedHospital = false;
-    if (!isAssignedHospital) {
-      const request = await prisma.hospitalRequest.findFirst({
-        where: {
-          emergencyCaseId: emergencyCase.id,
-          hospitalId: hospital.id,
-          status: { in: ['ACCEPTED', 'PENDING'] },
-        },
-      });
-      if (request) {
-        isRequestedHospital = true;
-      }
-    }
+    let isAuthorized = false;
+    let authorizedHospitalId = null;
+    let hospitalName = 'CareSetu Facility';
 
-    if (!isAssignedHospital && !isRequestedHospital) {
-      throw new Error('Unauthorized: Hospital is not assigned or requested for this emergency case.');
+    if (userRole === 'ADMIN') {
+      isAuthorized = true;
+    } else if (userRole === 'HOSPITAL') {
+      const hospital = await prisma.hospital.findFirst({ where: { userId: requestingUserId } });
+      if (!hospital) {
+        throw new Error('Hospital profile not found.');
+      }
+      authorizedHospitalId = hospital.id;
+      hospitalName = hospital.name;
+
+      const isAssignedHospital = emergencyCase.hospitalId === hospital.id;
+      let isRequestedHospital = false;
+      if (!isAssignedHospital) {
+        const request = await prisma.hospitalRequest.findFirst({
+          where: {
+            emergencyCaseId: emergencyCase.id,
+            hospitalId: hospital.id,
+            status: { in: ['ACCEPTED', 'PENDING'] },
+          },
+        });
+        if (request) isRequestedHospital = true;
+      }
+
+      isAuthorized = isAssignedHospital || isRequestedHospital;
+      if (!isAuthorized) {
+        throw new Error('Unauthorized: Hospital is not assigned or requested for this emergency case.');
+      }
+    } else if (userRole === 'DOCTOR') {
+      const doctorUser = await prisma.user.findUnique({
+        where: { id: requestingUserId },
+        select: { id: true, email: true },
+      });
+      if (!doctorUser) {
+        throw new Error('Doctor user profile not found.');
+      }
+
+      if (!emergencyCase.hospitalId) {
+        throw new Error('Unauthorized: Emergency case has no hospital affiliation.');
+      }
+
+      const userEmail = String(doctorUser.email || '').toLowerCase();
+
+      // Enforce active hospital affiliation at emergencyCase.hospitalId
+      const activeStaff = await prisma.hospitalStaff.findFirst({
+        where: {
+          hospitalId: emergencyCase.hospitalId,
+          OR: [
+            { userId: requestingUserId },
+            ...(userEmail ? [{ email: { equals: userEmail, mode: 'insensitive' } }] : []),
+          ],
+          isActive: true,
+        },
+        select: { id: true },
+      });
+
+      if (!activeStaff) {
+        throw new Error('Unauthorized: Doctor has no active hospital affiliation with this facility.');
+      }
+
+      // Enforce direct assignment to this emergency case
+      const assignment = emergencyCase.medicalSummary?.assignedDoctor;
+      const isAssigned = assignment && (
+        assignment.id === requestingUserId ||
+        assignment.id === activeStaff.id ||
+        (assignment.email && String(assignment.email).toLowerCase() === userEmail) ||
+        (emergencyCase.assignedDoctorId && (emergencyCase.assignedDoctorId === requestingUserId || emergencyCase.assignedDoctorId === activeStaff.id))
+      );
+
+      if (!isAssigned) {
+        throw new Error('Unauthorized: Doctor is not assigned to this emergency case.');
+      }
+
+      isAuthorized = true;
+      authorizedHospitalId = emergencyCase.hospitalId;
+      if (authorizedHospitalId) {
+        const hospital = await prisma.hospital.findUnique({
+          where: { id: authorizedHospitalId },
+          select: { name: true },
+        });
+        if (hospital) hospitalName = hospital.name;
+      }
+    } else {
+      throw new Error('Unauthorized access: Role is not permitted to view HealthPack for case.');
     }
 
     // Retrieve active HealthPack for the patient
@@ -281,60 +381,53 @@ class HealthPackService {
     }
 
     // Check HealthPack overall expiration
-    if (healthPack.expiresAt && healthPack.expiresAt < new Date()) {
+    if (healthPack.expiresAt && new Date(healthPack.expiresAt) <= new Date()) {
       throw new Error('Unauthorized access: HealthPack has expired.');
     }
 
-    // Normalize shared_with values as string array of UUIDs
-    let activeShares = (healthPack.shares || []).filter(
-      (s) => s.status === 'ACTIVE' && (!s.expiresAt || new Date(s.expiresAt) > new Date())
+    // Find existing share record for this hospital or user
+    const existingShare = (healthPack.shares || []).find(
+      (s) =>
+        (authorizedHospitalId && String(s.sharedWithHospitalId) === String(authorizedHospitalId)) ||
+        String(s.sharedWithUserId) === String(requestingUserId)
     );
-
-    let shared_with = activeShares.map((s) => String(s.sharedWithHospitalId || s.sharedWithUserId || '')).filter(Boolean);
-    let isSharedWithMember = shared_with.includes(String(hospital.id)) || shared_with.includes(String(hospitalUserId));
 
     const inactiveCaseStatuses = ['CLOSED', 'CANCELLED', 'RESOLVED', 'EXPIRED', 'REJECTED'];
     const isCaseActive = !inactiveCaseStatuses.includes(String(emergencyCase.status).toUpperCase());
 
-    // If hospital IS assigned/requested for an ACTIVE emergency case but share is missing/expired, grant/renew temporary HealthPack access
-    if (!isSharedWithMember && (isAssignedHospital || isRequestedHospital) && isCaseActive) {
-      await this.shareHealthPackWithHospital(emergencyCase.patientId, hospital.id, hospitalUserId);
-      healthPack = await prisma.healthPack.findUnique({
-        where: { id: healthPack.id },
-        include: { shares: true },
-      });
-      activeShares = (healthPack.shares || []).filter(
-        (s) => s.status === 'ACTIVE' && (!s.expiresAt || new Date(s.expiresAt) > new Date())
-      );
-      shared_with = activeShares.map((s) => String(s.sharedWithHospitalId || s.sharedWithUserId || '')).filter(Boolean);
-      isSharedWithMember = shared_with.includes(String(hospital.id)) || shared_with.includes(String(hospitalUserId));
+    let shareRecord = existingShare;
+
+    if (existingShare) {
+      if (existingShare.consentGranted === false) {
+        throw new Error('Unauthorized access: HealthPack share is inactive or has been revoked.');
+      }
+      if (existingShare.expiresAt && new Date(existingShare.expiresAt) <= new Date()) {
+        throw new Error('Unauthorized access: HealthPack share has expired.');
+      }
+      if (userRole === 'DOCTOR' && !isCaseActive) {
+        throw new Error('Unauthorized access: HealthPack access is closed because the emergency case has concluded.');
+      }
+    } else {
+      if (isAuthorized && isCaseActive) {
+        const baseTimestamp = emergencyCase.acceptedAt || emergencyCase.createdAt;
+        shareRecord = await this.shareHealthPackWithHospital(emergencyCase.patientId, authorizedHospitalId, requestingUserId, baseTimestamp);
+      } else {
+        throw new Error('Unauthorized access: HealthPack access not granted.');
+      }
     }
 
     // Safe diagnostic log (DO NOT log keys, medical data, or tokens)
     console.log('[HealthPack Diagnostic Log]', {
       caseId: emergencyCase.caseId || emergencyCase.id,
-      hospitalId: hospital.id,
-      hospitalRole: userRole,
+      requesterId: requestingUserId,
+      userRole,
       healthPackId: healthPack.id,
-      sharedWithMembershipResult: isSharedWithMember ? 'AUTHORIZED' : 'UNAUTHORIZED',
+      sharedWithMembershipResult: shareRecord ? 'AUTHORIZED' : 'UNAUTHORIZED',
     });
 
-    if (!isSharedWithMember) {
-      await prisma.auditLog.create({
-        data: {
-          userId: hospitalUserId,
-          action: 'HEALTH_PACK_VIEWED',
-          entity: 'HealthPack',
-          entityId: healthPack.id,
-          details: { event: 'UNAUTHORIZED_ACCESS_ATTEMPT', caseId, reason: 'No active share record found for hospital' },
-        },
-      });
-      throw new Error('Unauthorized access: HealthPack access expired or not shared.');
+    if (!shareRecord && userRole !== 'ADMIN') {
+      throw new Error('Unauthorized access: HealthPack access not shared.');
     }
-
-    const shareRecord = activeShares.find(
-      (s) => String(s.sharedWithHospitalId) === String(hospital.id) || String(s.sharedWithUserId) === String(hospitalUserId)
-    );
 
     // Decrypt AES-256-CBC hex payload strictly
     const decryptedString = decrypt(healthPack.encryptedData, healthPack.iv);
@@ -359,6 +452,7 @@ class HealthPackService {
     });
 
     const { decryptJSON } = require('../utils/crypto');
+
     let decryptedMedicalSummary = null;
     if (emergencyCase.medicalSummary) {
       try {
@@ -375,11 +469,11 @@ class HealthPackService {
     // Write audit log
     await prisma.auditLog.create({
       data: {
-        userId: hospitalUserId,
+        userId: requestingUserId,
         action: 'HEALTH_PACK_VIEWED',
         entity: 'HealthPack',
         entityId: healthPack.id,
-        details: { event: 'HEALTH_PACK_DECRYPTED', caseId, hospitalName: hospital.name },
+        details: { event: 'HEALTH_PACK_DECRYPTED', caseId, hospitalName },
       },
     });
 

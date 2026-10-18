@@ -78,6 +78,12 @@ const deleteDocument = async (req, res, next) => {
 };
 
 const downloadDocument = async (req, res, next) => {
+  // Set anti-caching & MIME sniffing defense security headers across all responses (success or denied)
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+
   try {
     const { documentId } = req.params;
     const requestingUser = req.user;
@@ -98,17 +104,13 @@ const downloadDocument = async (req, res, next) => {
       contentType = 'image/png';
     }
 
-    // Set anti-caching security headers
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `inline; filename="${safeFileName}"`);
     return res.sendFile(fileInfo.fullPath);
   } catch (error) {
     if (error.message.includes('traversal') || error.message.includes('Security Error') || error.message.includes('Access denied') || error.message.includes('expired')) {
-      return res.status(403).json({ success: false, error: error.message });
+      const reason = error.code || (error.message.toLowerCase().includes('expired') ? 'DOCUMENT_ACCESS_EXPIRED' : error.message.toLowerCase().includes('revoked') ? 'CONSENT_REQUIRED' : 'HOSPITAL_NOT_AUTHORIZED');
+      return res.status(403).json({ success: false, error: error.message, code: reason, reason });
     }
     if (error.message.includes('Invalid document ID') || error.message.includes('invalid')) {
       return res.status(400).json({ success: false, error: error.message });

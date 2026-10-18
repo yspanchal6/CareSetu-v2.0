@@ -135,7 +135,51 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   return executeRequest();
 }
 
-export type BackendRole = "PATIENT" | "HOSPITAL" | "DOCTOR" | "ADMIN";
+async function requestBlob(path: string): Promise<Blob> {
+  const headers = new Headers();
+  const token = getAuthToken();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, { headers });
+  } catch {
+    throw new ApiError("Cannot reach the CareSetu API. Check that the backend is running.", 0);
+  }
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    if (response.status === 401) {
+      clearAuthToken();
+      sessionStorage.removeItem("caresetu_user");
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("caresetu:unauthorized", {
+            detail: {
+              message: payload?.error || payload?.message || "Your CareSetu account has been permanently terminated.",
+              code: payload?.code,
+              terminated: payload?.terminated,
+            },
+          })
+        );
+      }
+    }
+
+    const retryHeader = response.headers.get("Retry-After");
+    const retryAfterSeconds = retryHeader ? parseInt(retryHeader, 10) : payload?.retryAfterSeconds;
+    throw new ApiError(
+      payload?.error ?? payload?.message ?? `Request failed (${response.status})`,
+      response.status,
+      retryAfterSeconds
+    );
+  }
+
+  return response.blob();
+}
+
+export type BackendRole = "PATIENT" | "HOSPITAL" | "DOCTOR" | "ADMIN" | "CLINIC";
 
 export interface AuthResponse {
   success: true;
@@ -152,11 +196,13 @@ export interface AuthResponse {
     isGuest?: boolean;
     patient?: any;
     hospital?: any;
+    portalRoute?: string;
   };
   message?: string;
   mock?: boolean;
   isNewUser?: boolean;
   onboardingRoute?: string;
+  portalRoute?: string;
   expiresAt?: string;
   channels?: Array<{ channel: string; status: string; mock?: boolean; error?: string }>;
   devOtp?: string;
@@ -176,6 +222,8 @@ export interface SignUpPayload {
   pincode?: string;
   latitude?: number;
   longitude?: number;
+  termsAccepted?: boolean;
+  policyVersion?: string;
 }
 
 export interface EmergencyLocation {
@@ -335,6 +383,23 @@ export const authApi = {
     request<{ success: true; user: AuthResponse["user"] }>("/auth/me", {
       method: "GET",
     }),
+  activateDoctor: (payload: { token: string; password: string }) =>
+    request<{ success: boolean; message: string }>("/auth/activate-doctor", {
+      method: "POST",
+      authenticated: false,
+      body: payload,
+    }),
+  changePasswordMandatory: (payload: { currentPassword?: string; newPassword: string; confirmPassword?: string }) =>
+    request<{ success: boolean; message: string; token: string; user?: any }>("/auth/change-password-mandatory", {
+      method: "POST",
+      body: payload,
+    }),
+  registerProvider: (payload: any) =>
+    request<AuthResponse>("/auth/register-provider", {
+      method: "POST",
+      authenticated: false,
+      body: payload,
+    }),
   logout: () => {
     clearAuthToken();
     return Promise.resolve();
@@ -342,7 +407,7 @@ export const authApi = {
 };
 
 export const emergencyApi = {
-  create: (payload: { symptoms: string; location: EmergencyLocation; idempotencyKey?: string; emergencyType?: string; source?: string }) => {
+  create: (payload: { symptoms: string; location: EmergencyLocation; idempotencyKey?: string; emergencyType?: string; source?: string; severity?: string }) => {
     const { latitude, longitude } = payload.location;
     if (
       typeof latitude !== "number" ||
@@ -362,6 +427,7 @@ export const emergencyApi = {
       idempotencyKey: payload.idempotencyKey,
       emergencyType: payload.emergencyType,
       source: payload.source,
+      severity: payload.severity,
     };
 
     console.log("SOS payload:", requestPayload);
@@ -373,6 +439,8 @@ export const emergencyApi = {
   },
   status: (caseId: string) =>
     request<{ success: true; case: EmergencyCaseStatus }>(`/emergency/status/${caseId}`),
+  getByOperationId: (operationId: string) =>
+    request<{ success: true; case: EmergencyCaseStatus }>(`/emergency/by-op-id/${encodeURIComponent(operationId)}`),
   attempts: (caseId: string) =>
     request<{ success: true; attempts: EmergencyAttempt[] }>(`/emergency/attempts/${caseId}`),
   cancel: (caseId: string) =>
@@ -409,6 +477,71 @@ export function emergencySyncClient(_endpoint: string, requestPayload: any) {
   });
 }
 
+export const doctorApi = {
+  getProfile: () =>
+    request<{ success: true; profile: any }>("/doctors/profile"),
+  getDashboard: () =>
+    request<{
+      success: true;
+      stats: { assigned: number; critical: number; pending: number; completed: number };
+      recentPatients: any[];
+    }>("/doctors/dashboard"),
+  getIndependentDashboard: () =>
+    request<{
+      success: true;
+      practice: any;
+      stats: { consultations: number; activePatients: number; pendingAppointments: number; completedSessions: number };
+      notice: string;
+    }>("/doctors/independent/dashboard"),
+  getCases: () =>
+    request<{ success: true; cases: any[]; caseHistory: any[] }>("/doctors/cases"),
+  getCaseById: (id: string) =>
+    request<{ success: true; emergencyCase: any; case?: any; patient: any }>(`/doctors/cases/${id}`),
+  updateCaseStatus: (id: string, status: string) =>
+    request<{ success: true; message: string; case: any }>(`/doctors/cases/${id}/status`, {
+      method: "PUT",
+      body: { status },
+    }),
+  getCaseHealthPack: (id: string) =>
+    request<{ success: true; healthPack: any }>(`/doctors/cases/${id}/health-pack`),
+  getIndependentProfile: () =>
+    request<{ success: boolean; profile: any }>("/doctors/profile"),
+  updateIndependentProfile: (payload: any) =>
+    request<{ success: boolean; message: string; profile: any }>("/doctors/profile", {
+      method: "PUT",
+      body: payload,
+    }),
+  getVerificationStatus: () =>
+    request<{
+      success: boolean;
+      verificationStatus: string;
+      rejectionReason?: string;
+      reviewedAt?: string;
+      hasHospitalAffiliation?: boolean;
+      hospitalAffiliation?: { hospitalId: string; hospitalName?: string; staffRole?: string } | null;
+      message?: string;
+      profile?: any;
+    }>("/doctors/independent/verification-status"),
+  submitDiagnosis: (id: string, payload: {
+    primaryDiagnosis: string;
+    clinicalNotes: string;
+    treatmentPlan?: string;
+    action?: 'SUBMIT' | 'DRAFT';
+    expectedVersion?: number;
+  }) =>
+    request<{ success: boolean; message: string; diagnosisReport: any }>(`/doctors/cases/${id}/diagnosis`, {
+      method: "POST",
+      body: payload,
+    }),
+  getDiagnosis: (id: string) =>
+    request<{ success: boolean; caseId: string; status: string; diagnosisReport: any; treatmentNotes: any[] }>(`/doctors/cases/${id}/diagnosis`),
+  addTreatmentNote: (id: string, payload: { note: string; vitals?: any }) =>
+    request<{ success: boolean; message: string; note: any; treatmentNotes: any[] }>(`/doctors/cases/${id}/treatment-notes`, {
+      method: "POST",
+      body: payload,
+    }),
+};
+
 export const hospitalApi = {
   nearby: (latitude: number, longitude: number, radius?: number) => {
     const radiusParam = radius ? `&radius=${radius}` : '';
@@ -420,6 +553,11 @@ export const hospitalApi = {
     request<{ success: true; cases: any[] }>(`/hospitals/cases`),
   acceptCase: (caseId: string) =>
     request<{ success: true }>(`/emergency/accept/${caseId}`, { method: "POST" }),
+  assignDoctor: (caseId: string, staffId: string, doctorName?: string, specialty?: string) =>
+    request<{ success: true; message: string; case: any; assignedDoctor: any }>(`/hospitals/cases/${caseId}/assign-doctor`, {
+      method: "POST",
+      body: { staffId, doctorName, specialty },
+    }),
   rejectCase: (caseId: string, reason?: string) =>
     request<{ success: true }>(`/emergency/reject/${caseId}`, { method: "POST", body: { reason } }),
   pendingCases: (latitude?: number, longitude?: number) => {
@@ -454,8 +592,24 @@ export const hospitalApi = {
     request<{ success: true; hasUnseenApproval: boolean; eventId?: string; message?: string }>("/hospitals/approval-event"),
   consumeApprovalEvent: (eventId: string) =>
     request<{ success: true; message: string }>("/hospitals/approval-event/consume", { method: "POST", body: { eventId } }),
-  getStaff: () =>
-    request<{ success: true; staff: any[] }>("/hospitals/staff"),
+  getStaff: (params?: { dutyStatus?: string; search?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.dutyStatus) query.append("dutyStatus", params.dutyStatus);
+    if (params?.search) query.append("search", params.search);
+    const queryString = query.toString() ? `?${query.toString()}` : "";
+    return request<{ success: boolean; staff: any[]; counts?: { total: number; onDuty: number; offDuty: number; onLeave: number }; error?: string }>(`/hospitals/staff${queryString}`);
+  },
+  createStaff: (payload: any) =>
+    request<{ success: boolean; message?: string; staff?: any; accountLinked?: boolean; mustChangePassword?: boolean; emailDelivery?: any; error?: string }>("/hospitals/staff", { method: "POST", body: payload }),
+  updateStaff: (id: string, payload: any) =>
+    request<{ success: boolean; message?: string; staff?: any; error?: string }>(`/hospitals/staff/${id}`, { method: "PUT", body: payload }),
+  deleteStaff: (id: string) =>
+    request<{ success: boolean; message?: string; staffId?: string; error?: string }>(`/hospitals/staff/${id}`, { method: "DELETE" }),
+  provisionDoctor: (payload: { name: string; email: string; phone?: string; specialty?: string; licenseNumber?: string }) =>
+    request<{ success: boolean; message: string; activationUrl?: string; doctor: any; deliveryStatus: string }>(
+      "/hospitals/staff/provision-doctor",
+      { method: "POST", body: payload }
+    ),
   getSettings: () =>
     request<{ success: true; settings: any }>("/hospitals/settings"),
   updateSettings: (payload: any) =>
@@ -464,6 +618,22 @@ export const hospitalApi = {
     request<{ success: true; data: any }>(`/health-pack/case/${caseId}`),
   getSharedPack: (packId: string) =>
     request<{ success: true; data: any }>(`/health-pack/shared/${packId}`),
+  getPendingDiagnosisReviews: () =>
+    request<{ success: boolean; count: number; pendingReviews: any[] }>("/hospitals/diagnosis-reviews/pending"),
+  reviewDiagnosis: (caseId: string, payload: {
+    decision: 'APPROVED' | 'CHANGES_REQUESTED';
+    feedback?: string;
+    expectedVersion?: number;
+  }) =>
+    request<{ success: boolean; message: string; decision: string; diagnosisReport: any }>(`/hospitals/cases/${caseId}/diagnosis/review`, {
+      method: "POST",
+      body: payload,
+    }),
+  closeEmergencyCase: (caseId: string, closureNotes?: string) =>
+    request<{ success: boolean; message: string; case: any }>(`/hospitals/cases/${caseId}/close`, {
+      method: "POST",
+      body: { closureNotes },
+    }),
 };
 
 export const patientApi = {
@@ -664,6 +834,37 @@ export const adminApi = {
       method: "POST",
       body: data,
     }),
+  getPendingProviders: (params?: { status?: string; type?: string }) => {
+    const p = new URLSearchParams();
+    if (params?.status) p.append("status", params.status);
+    if (params?.type) p.append("type", params.type);
+    return request<{ success: boolean; count: number; providers: any[] }>(`/admin/providers?${p.toString()}`);
+  },
+  reviewProvider: (id: string, payload: { decision: "APPROVED" | "REJECTED" | "SUSPENDED"; providerType?: string; reviewNotes?: string }) =>
+    request<{ success: boolean; message: string; provider: any }>(`/admin/providers/${id}/review`, {
+      method: "POST",
+      body: payload,
+    }),
+  getProviderDocument: (providerId: string, documentId: string) =>
+    requestBlob(
+      `/admin/providers/${encodeURIComponent(providerId)}/documents/${encodeURIComponent(documentId)}`
+    ),
+};
+
+export const clinicApi = {
+  getProfile: () =>
+    request<{ success: boolean; clinic: any }>("/clinics/profile"),
+  updateProfile: (data: any) =>
+    request<{ success: boolean; message: string; clinic: any }>("/clinics/profile", {
+      method: "PUT",
+      body: data,
+    }),
+  getStaff: () =>
+    request<{ success: boolean; clinicId: string; staff: any[] }>("/clinics/staff"),
+  getAppointments: () =>
+    request<{ success: boolean; clinicId: string; appointments: any[] }>("/clinics/appointments"),
+  getVerificationStatus: () =>
+    request<{ success: boolean; verificationStatus: string; rejectionReason?: string; reviewedAt?: string; clinic?: any }>("/clinic/verification-status"),
 };
 
 export interface DocumentVerificationStatus {

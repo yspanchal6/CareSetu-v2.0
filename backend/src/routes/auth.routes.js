@@ -13,6 +13,9 @@ const {
   cancelRegistration,
   guestSession,
   googleAuth,
+  activateDoctorAccount,
+  changePasswordMandatory,
+  registerProvider,
 } = require("../controllers/auth.controller");
 
 const { auth } = require("../middleware/auth.middleware");
@@ -25,6 +28,9 @@ const {
 const router = express.Router();
 
 router.post("/register", registerRateLimiter, register);
+router.post("/register-provider", registerRateLimiter, registerProvider);
+router.post("/activate-doctor", otpRateLimiter, activateDoctorAccount);
+router.post("/change-password-mandatory", auth, changePasswordMandatory);
 router.post("/login", loginRateLimiter, login);
 router.post("/google", loginRateLimiter, googleAuth);
 router.post("/guest-session", guestSession);

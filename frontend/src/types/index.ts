@@ -14,6 +14,8 @@ export interface User {
   hospitalSecurityStatus?: string;
   currentViolationCount?: number;
   securityEpoch?: number;
+  portalRoute?: string;
+  hasPassword?: boolean;
 }
 
 
@@ -67,6 +69,8 @@ export type EmergencyStage =
 
 export interface EmergencyCase {
   id: string;
+  caseId?: string;
+  publicCaseId?: string;
   patientId: string;
   patientName: string;
   age: number;
