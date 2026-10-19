@@ -18,6 +18,7 @@ import {
   Pie, Cell, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid, Legend 
 } from "recharts";
 import CredentialUpdateModal from "../../components/common/CredentialUpdateModal";
+import BulkHospitalToolbar from "../../components/admin/BulkHospitalToolbar";
 import { useTranslation } from "../../i18n";
 
 interface BlockModalProps {
@@ -331,6 +332,7 @@ export function AdminHospitalsPage() {
   const [query, setQuery] = useState("");
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   // Modals state
   const [inspectHospital, setInspectHospital] = useState<any>(null);
@@ -347,6 +349,7 @@ export function AdminHospitalsPage() {
       setLoading(true);
       const res = await adminApi.getHospitalVerificationRequests(statusFilter, query);
       setRequests(res.requests || []);
+      setSelectedIds([]);
     } catch (err) {
       console.error("[AdminHospitals] Verification load error:", err);
     } finally {
@@ -429,11 +432,64 @@ export function AdminHospitalsPage() {
         </div>
       </div>
 
+      {/* Bulk Action Toolbar */}
+      <BulkHospitalToolbar
+        selectedCount={selectedIds.length}
+        totalCount={requests.length}
+        allSelected={requests.length > 0 && selectedIds.length === requests.length}
+        onSelectAll={() => setSelectedIds(requests.map((r: any) => r.id || r.hospitalId))}
+        onDeselectAll={() => setSelectedIds([])}
+        isLoading={actionLoading}
+        onBulkApprove={async () => {
+          setActionLoading(true);
+          try {
+            for (const id of selectedIds) {
+              await adminApi.approveHospital(id);
+            }
+            setSelectedIds([]);
+            await loadVerificationRequests();
+          } catch (e: any) {
+            setActionError(e.message || "Bulk approval failed");
+          } finally {
+            setActionLoading(false);
+          }
+        }}
+        onBulkReject={async () => {
+          setActionLoading(true);
+          try {
+            for (const id of selectedIds) {
+              await adminApi.rejectHospital(id, "Rejected via Admin Bulk Action Toolbar");
+            }
+            setSelectedIds([]);
+            await loadVerificationRequests();
+          } catch (e: any) {
+            setActionError(e.message || "Bulk rejection failed");
+          } finally {
+            setActionLoading(false);
+          }
+        }}
+      />
+
       {/* Main Table */}
       <Card padded={false} className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-text-secondary text-xs uppercase">
             <tr>
+              <th className="px-4 py-3 w-10 text-center">
+                <input
+                  type="checkbox"
+                  checked={requests.length > 0 && selectedIds.length === requests.length}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedIds(requests.map((r: any) => r.id || r.hospitalId));
+                    } else {
+                      setSelectedIds([]);
+                    }
+                  }}
+                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  aria-label="Select all hospitals"
+                />
+              </th>
               <th className="text-left px-4 py-3 font-semibold">Hospital Facility</th>
               <th className="text-left px-4 py-3 font-semibold">Address & Coordinates</th>
               <th className="text-left px-4 py-3 font-semibold">Uploaded Documents</th>
@@ -444,13 +500,13 @@ export function AdminHospitalsPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
                   Loading hospital verification requests...
                 </td>
               </tr>
             ) : requests.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
                   No hospital verification requests found for this filter.
                 </td>
               </tr>
@@ -460,9 +516,26 @@ export function AdminHospitalsPage() {
                 const isPending = item.verificationStatus === "PENDING_REVIEW";
                 const isRejected = item.verificationStatus === "REJECTED";
                 const isBlocked = item.verificationStatus === "BLOCKED";
+                const itemId = item.id || item.hospitalId;
+                const isSelected = selectedIds.includes(itemId);
 
                 return (
                   <tr key={item.id} className="border-t border-slate-50 hover:bg-slate-50/50">
+                    <td className="px-4 py-3 text-center">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {
+                          setSelectedIds((prev) =>
+                            prev.includes(itemId)
+                              ? prev.filter((id) => id !== itemId)
+                              : [...prev, itemId]
+                          );
+                        }}
+                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                        aria-label={`Select ${item.name}`}
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <p className="font-bold text-navy">{item.name}</p>
                       <p className="text-xs text-slate-500">{item.email}</p>
@@ -1056,19 +1129,28 @@ export function AdminEmergenciesPage() {
 }
 
 export function AdminAuditLogsPage() {
-  const [tab, setTab] = useState<"logs" | "blocklist">("logs");
+  const [tab, setTab] = useState<"logs" | "blocklist" | "roles">("logs");
   const [logs, setLogs] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
-    if (tab === "logs") {
+    if (tab === "logs" || tab === "roles") {
       adminApi.getAuditLogs().then((res) => setLogs(res.logs || [])).finally(() => setLoading(false));
     } else {
       adminApi.getBlocklistHistory().then((res) => setHistory(res.history || [])).finally(() => setLoading(false));
     }
   }, [tab]);
+
+  const roleLogs = logs.filter(
+    (a) =>
+      a.action?.includes("ROLE") ||
+      a.details?.event === "ROLE_CHANGED" ||
+      a.details?.role ||
+      a.entity === "UserRoleChangeLog" ||
+      a.action === "ADMIN_ACTION"
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -1078,6 +1160,12 @@ export function AdminAuditLogsPage() {
           className={`px-4 py-2 text-xs font-bold rounded-xl transition ${tab === "logs" ? "bg-navy text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
         >
           Security Audit Logs
+        </button>
+        <button
+          onClick={() => setTab("roles")}
+          className={`px-4 py-2 text-xs font-bold rounded-xl transition ${tab === "roles" ? "bg-navy text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+        >
+          Role Change Audit Filter
         </button>
         <button
           onClick={() => setTab("blocklist")}
@@ -3608,6 +3696,348 @@ export function AdminDeletionRequestsPage() {
                 >
                   {processing ? "Rejecting..." : "Reject Request"}
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function AdminProviderReviewsPage() {
+  const [typeFilter, setTypeFilter] = useState<string>("ALL");
+  const [statusFilter, setStatusFilter] = useState<string>("PENDING_ADMIN_REVIEW");
+  const [providers, setProviders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedProvider, setSelectedProvider] = useState<any>(null);
+  const [decision, setDecision] = useState<"APPROVED" | "REJECTED">("APPROVED");
+  const [reviewNotes, setReviewNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [documentPreview, setDocumentPreview] = useState<{ documentType: string; url: string } | null>(null);
+  const [documentLoadError, setDocumentLoadError] = useState<string | null>(null);
+  const [loadingDocumentId, setLoadingDocumentId] = useState<string | null>(null);
+  const { showToast } = useToast();
+
+  useEffect(() => {
+    if (!documentPreview?.url) return;
+    return () => URL.revokeObjectURL(documentPreview.url);
+  }, [documentPreview?.url]);
+
+  const loadProviders = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await adminApi.getPendingProviders({
+        status: statusFilter,
+        type: typeFilter
+      });
+      setProviders(res.providers || []);
+    } catch (err: any) {
+      showToast("error", err.message || "Failed to load provider credentials");
+    } finally {
+      setLoading(false);
+    }
+  }, [statusFilter, typeFilter, showToast]);
+
+  useEffect(() => {
+    loadProviders();
+  }, [loadProviders]);
+
+  const handleReviewSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProvider) return;
+    setSubmitting(true);
+    try {
+      await adminApi.reviewProvider(selectedProvider.id, {
+        decision,
+        providerType: selectedProvider.providerType,
+        reviewNotes
+      });
+      showToast("success", `Provider successfully marked as ${decision}`);
+      setSelectedProvider(null);
+      setDocumentPreview(null);
+      setDocumentLoadError(null);
+      setReviewNotes("");
+      loadProviders();
+    } catch (err: any) {
+      showToast("error", err.message || "Failed to submit review decision");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleViewProviderDocument = async (document: { id: string; documentType: string }) => {
+    if (!selectedProvider) return;
+
+    setLoadingDocumentId(document.id);
+    setDocumentLoadError(null);
+    setDocumentPreview(null);
+    try {
+      const blob = await adminApi.getProviderDocument(selectedProvider.id, document.id);
+      setDocumentPreview({
+        documentType: document.documentType,
+        url: URL.createObjectURL(blob),
+      });
+    } catch (error) {
+      setDocumentLoadError(error instanceof Error ? error.message : "Failed to load this document.");
+    } finally {
+      setLoadingDocumentId(null);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-black text-navy tracking-tight">Provider Credential Verification</h1>
+          <p className="text-sm text-text-secondary mt-1">
+            Review and approve registration licenses for independent clinics and outpatient doctors.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={loadProviders}>
+            <RefreshCw className="w-4 h-4 mr-1.5" /> Refresh
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center bg-slate-100 p-1 rounded-xl">
+          {(["ALL", "DOCTOR", "CLINIC"] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => setTypeFilter(t)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                typeFilter === t ? "bg-white text-navy shadow-xs" : "text-slate-600 hover:text-navy"
+              }`}
+            >
+              {t === "ALL" ? "All Providers" : t === "DOCTOR" ? "Doctors" : "Clinics"}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center bg-slate-100 p-1 rounded-xl">
+          {(["PENDING_ADMIN_REVIEW", "APPROVED", "REJECTED", "ALL"] as const).map(s => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                statusFilter === s ? "bg-white text-navy shadow-xs" : "text-slate-600 hover:text-navy"
+              }`}
+            >
+              {s === "PENDING_ADMIN_REVIEW" ? "Pending Review" : s === "APPROVED" ? "Approved" : s === "REJECTED" ? "Rejected" : "All Statuses"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <Card className="p-12 text-center text-text-secondary">
+          <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-sky" />
+          Loading credential submissions...
+        </Card>
+      ) : providers.length === 0 ? (
+        <Card className="p-12 text-center text-text-secondary">
+          <ShieldCheck className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+          <p className="font-bold text-navy">No providers found matching these filters.</p>
+          <p className="text-xs text-text-secondary mt-1">All provider credential queues are currently clear.</p>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {providers.map(p => (
+            <Card key={p.id} className="p-5 flex flex-col justify-between hover:border-slate-300 transition-all">
+              <div>
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <Badge tone={p.providerType === "CLINIC" ? "neutral" : "accent"}>
+                    {p.providerType}
+                  </Badge>
+                  <Badge tone={p.verificationStatus === "APPROVED" ? "accepted" : p.verificationStatus === "REJECTED" ? "rejected" : "pending"}>
+                    {p.verificationStatus}
+                  </Badge>
+                </div>
+                <h3 className="font-extrabold text-navy text-base leading-snug">{p.name}</h3>
+                <p className="text-xs text-slate-500 mt-0.5">{p.email || "No email"}</p>
+
+                <div className="mt-3.5 pt-3.5 border-t border-slate-100 space-y-1.5 text-xs text-slate-600">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Reg / License:</span>
+                    <span className="font-mono font-semibold text-navy">{p.registrationNumber}</span>
+                  </div>
+                  {p.specialty && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Specialty:</span>
+                      <span className="font-medium text-navy">{p.specialty}</span>
+                    </div>
+                  )}
+                  {p.city && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Location:</span>
+                      <span className="text-navy">{p.city}, {p.state}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Submitted:</span>
+                    <span>{new Date(p.submittedAt).toLocaleDateString()}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedProvider(p);
+                    setDecision("APPROVED");
+                    setReviewNotes("");
+                    setDocumentPreview(null);
+                    setDocumentLoadError(null);
+                  }}
+                >
+                  Review Credentials
+                </Button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {selectedProvider && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 border border-slate-100 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-sky" />
+                <h3 className="font-bold text-navy text-base">Review Provider Credentials</h3>
+              </div>
+              <button
+                onClick={() => {
+                  setSelectedProvider(null);
+                  setDocumentPreview(null);
+                  setDocumentLoadError(null);
+                }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 bg-slate-50 rounded-xl space-y-1 text-xs">
+              <p><strong className="text-navy">Provider:</strong> {selectedProvider.name} ({selectedProvider.providerType})</p>
+              <p><strong className="text-navy">License #:</strong> {selectedProvider.registrationNumber}</p>
+              {selectedProvider.medicalCouncil && <p><strong className="text-navy">Council:</strong> {selectedProvider.medicalCouncil}</p>}
+              <p><strong className="text-navy">City / State:</strong> {selectedProvider.city}, {selectedProvider.state}</p>
+            </div>
+
+            {selectedProvider.providerType === "DOCTOR" && (
+              <section className="rounded-xl border border-slate-200 p-3.5 space-y-3" aria-label="Doctor verification documents">
+                <h4 className="text-xs font-bold text-navy">Submitted verification documents</h4>
+                <div className="space-y-2">
+                  {([
+                    ["MEDICAL_LICENSE", "Medical license"],
+                    ["GOVT_ID", "Government ID"],
+                  ] as const).map(([documentType, label]) => {
+                    const document = selectedProvider.documents?.find(
+                      (item: { id: string; documentType: string }) => item.documentType === documentType
+                    );
+
+                    return (
+                      <div key={documentType} className="flex items-center justify-between gap-3 text-xs">
+                        <span className="text-slate-700">{label}</span>
+                        {document ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void handleViewProviderDocument(document)}
+                            loading={loadingDocumentId === document.id}
+                            disabled={Boolean(loadingDocumentId && loadingDocumentId !== document.id)}
+                          >
+                            View
+                          </Button>
+                        ) : (
+                          <span className="text-amber-700">Not uploaded</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {documentLoadError && (
+                  <p role="alert" className="text-xs text-rose-700">
+                    Unable to load document: {documentLoadError}
+                  </p>
+                )}
+                {documentPreview && (
+                  <div>
+                    <p className="text-xs font-semibold text-slate-600 mb-1">
+                      Preview: {documentPreview.documentType === "MEDICAL_LICENSE" ? "Medical license" : "Government ID"}
+                    </p>
+                    <iframe
+                      title={`${documentPreview.documentType} document preview`}
+                      src={documentPreview.url}
+                      className="w-full h-72 rounded-lg border border-slate-200"
+                    />
+                  </div>
+                )}
+              </section>
+            )}
+
+            <form onSubmit={handleReviewSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-navy mb-1.5">Decision</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDecision("APPROVED")}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+                      decision === "APPROVED" ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-600 hover:border-slate-300"
+                    }`}
+                  >
+                    ✓ Approve Provider
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDecision("REJECTED")}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+                      decision === "REJECTED" ? "border-rose-500 bg-rose-50 text-rose-700" : "border-slate-200 text-slate-600 hover:border-slate-300"
+                    }`}
+                  >
+                    ✕ Reject / Revoke
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-navy mb-1.5">
+                  Review Notes {decision === "REJECTED" && <span className="text-rose-500">*</span>}
+                </label>
+                <textarea
+                  rows={3}
+                  value={reviewNotes}
+                  onChange={(e) => setReviewNotes(e.target.value)}
+                  placeholder={decision === "REJECTED" ? "Reason for rejection or deficiency found..." : "Optional verification remarks..."}
+                  className="w-full text-xs p-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky/40 focus:border-sky outline-none resize-none"
+                  required={decision === "REJECTED"}
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={() => {
+                    setSelectedProvider(null);
+                    setDocumentPreview(null);
+                    setDocumentLoadError(null);
+                  }}
+                  disabled={submitting}
+                >
+                  Cancel
+                </Button>
+                <Button variant={decision === "APPROVED" ? "primary" : "danger"} size="sm" type="submit" loading={submitting}>
+                  Submit {decision} Decision
+                </Button>
               </div>
             </form>
           </div>
