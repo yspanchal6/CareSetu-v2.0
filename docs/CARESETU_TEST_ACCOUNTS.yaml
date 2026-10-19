@@ -1,0 +1,137 @@
+version: "1.0"
+registry_metadata:
+  environment: "local_development"
+  project: "CareSetu Emergency Healthcare Coordination"
+  last_updated: "2026-10-18"
+  security_notice: "Dedicated local test/demo credentials only. No production secrets stored."
+
+services:
+  frontend:
+    base_url: "http://localhost:5173"
+    login_url: "http://localhost:5173/login"
+    port: 5173
+  backend:
+    base_url: "http://localhost:5000"
+    login_endpoint: "http://localhost:5000/api/auth/login"
+    port: 5000
+  databases:
+    development_db: "postgresql://localhost:5432/caresetu"
+    isolated_test_db: "postgresql://localhost:5433/caresetu_doctor_test"
+
+accounts:
+  - role: "PATIENT"
+    account_type: "primary_demo_patient"
+    login_identifier: "test.patient@caresetu.local"
+    password_env_var: "TEST_PATIENT_PASSWORD"
+    default_dev_password_reference: "Test@12345"
+    portal_route: "/patient/dashboard"
+    verification_status: "VERIFIED"
+    verification_date: "2026-10-18"
+    provisioning_method: "backend/scripts/seed-test-patient.js"
+    details:
+      name: "CareSetu Test Patient"
+      status: "ACTIVE"
+      is_activated: true
+
+  - role: "PATIENT"
+    account_type: "alternate_seed_patient"
+    login_identifier: "patient@test.com"
+    password_env_var: "TEST_PASSWORD"
+    default_dev_password_reference: "password123"
+    portal_route: "/patient/dashboard"
+    verification_status: "VERIFIED"
+    verification_date: "2026-10-18"
+    provisioning_method: "backend/seed.js"
+    details:
+      name: "John Patient"
+      status: "ACTIVE"
+      is_activated: true
+
+  - role: "HOSPITAL"
+    account_type: "primary_demo_hospital"
+    login_identifier: "test.hospital@caresetu.local"
+    password_env_var: "TEST_HOSPITAL_PASSWORD"
+    default_dev_password_reference: "Test@12345"
+    portal_route: "/hospital/dashboard"
+    verification_status: "VERIFIED"
+    verification_date: "2026-10-18"
+    provisioning_method: "regional.database.seed.test.js"
+    details:
+      hospital_name: "CareSetu Test Hospital [DEMO]"
+      is_verified: true
+      emergency_available: true
+
+  - role: "HOSPITAL"
+    account_type: "alternate_seed_hospital"
+    login_identifier: "shreekrishna@caresetu.com"
+    password_env_var: "DEMO_HOSPITAL_PASSWORD"
+    default_dev_password_reference: "hospital123"
+    portal_route: "/hospital/dashboard"
+    verification_status: "VERIFIED"
+    verification_date: "2026-10-18"
+    provisioning_method: "backend/seed.js"
+    details:
+      hospital_name: "Shree Krishna Hospital"
+      city: "Karamsad"
+      state: "Gujarat"
+      is_verified: true
+
+  - role: "DOCTOR"
+    account_type: "hospital_linked_doctor"
+    login_identifier: "demo.doctor.apex@caresetu.local"
+    password_env_var: "TEST_DOCTOR_PASSWORD"
+    default_dev_password_reference: "Test@12345"
+    portal_route: "/doctor/hospital/dashboard"
+    verification_status: "VERIFIED"
+    verification_date: "2026-10-18"
+    provisioning_method: "hospital_staff_linkage"
+    details:
+      name: "Dr. Yashwanth Patel"
+      hospital_name: "[DEMO] Anand Apex Multi-Specialty Hospital"
+      clinical_role: "Emergency Physician"
+      status: "ACTIVE"
+      is_activated: true
+
+  - role: "HOSPITAL_STAFF"
+    account_type: "unlinked_clinical_staff"
+    login_identifier: "emergency.lead@caresetu.org"
+    password_env_var: null
+    default_dev_password_reference: null
+    portal_route: null
+    verification_status: "NOT_VERIFIED"
+    verification_date: "2026-10-18"
+    provisioning_method: "hospital_default_roster"
+    details:
+      staff_id: "STAFF-001"
+      name: "Dr. Emergency Lead"
+      role: "Emergency Physician"
+      note: "Roster member created during hospital provisioning; requires activation to obtain login credentials."
+
+  - role: "DOCTOR"
+    account_type: "independent_practice_doctor"
+    login_identifier: "dr.independent@caresetu.local"
+    password_env_var: "TEST_DOCTOR_PASSWORD"
+    default_dev_password_reference: "Test@12345"
+    portal_route: "/doctor/independent/dashboard"
+    verification_status: "VERIFIED"
+    verification_date: "2026-10-18"
+    provisioning_method: "doctor_profile_approval"
+    details:
+      name: "Dr. Anita Desai"
+      license_number: "GMC-IND-9948"
+      verification_status: "APPROVED"
+      status: "ACTIVE"
+
+  - role: "ADMIN"
+    account_type: "system_admin"
+    login_identifier: "admin@caresetu.com"
+    password_env_var: "ADMIN_PASSWORD"
+    default_dev_password_reference: null
+    portal_route: "/admin/dashboard"
+    verification_status: "NOT_VERIFIED"
+    verification_date: "2026-10-18"
+    provisioning_method: "backend/seed.js"
+    details:
+      name: "CareSetu System Admin"
+      status: "ACTIVE"
+      note: "Database password hash requires synchronization; use admin reset script to reseed credentials."

@@ -173,8 +173,9 @@ class GoogleAuthService {
   /**
    * Authenticates an EXISTING registered CareSetu user via Google OAuth.
    * Rejects unregistered Google users with HTTP 404 ACCOUNT_NOT_REGISTERED.
+   * Enforces role consistency if requestedRole is supplied.
    */
-  async authenticateGoogleLogin({ idToken }) {
+  async authenticateGoogleLogin({ idToken, requestedRole }) {
     const googleUser = await this.verifyGoogleToken(idToken);
     const { email } = googleUser;
 
@@ -191,15 +192,41 @@ class GoogleAuthService {
     if (!user) {
       const err = new Error('Your CareSetu account does not exist. Please register first.');
       err.code = 'ACCOUNT_NOT_REGISTERED';
-      err.status = 404;
+      err.status = 400;
       err.email = email;
       throw err;
+    }
+
+    // Role verification if requestedRole is specified
+    if (requestedRole && typeof requestedRole === 'string' && requestedRole.trim()) {
+      const normRequested = requestedRole.trim().toUpperCase();
+      const normUserRole = (user.role || '').toUpperCase();
+      if (normUserRole !== normRequested) {
+        const err = new Error('Unable to sign in with this account using the selected sign-in option. Please use the appropriate sign-in method or contact support if you need assistance.');
+        err.code = 'ROLE_MISMATCH';
+        err.status = 403;
+        throw err;
+      }
     }
 
     // Check account status
     if (user.status === 'BLOCKED') {
       const err = new Error('Account is suspended. Please contact CareSetu support.');
       err.code = 'ACCOUNT_DISABLED';
+      err.status = 403;
+      throw err;
+    }
+
+    if (user.status === 'PENDING_ACTIVATION' || user.isActivated === false) {
+      const err = new Error('Account activation is required. Please use the secure activation link sent by your hospital.');
+      err.code = 'ACCOUNT_NOT_ACTIVATED';
+      err.status = 403;
+      throw err;
+    }
+
+    if (user.status === 'INACTIVE') {
+      const err = new Error('Your account is inactive. Please contact your hospital administrator.');
+      err.code = 'ACCOUNT_INACTIVE';
       err.status = 403;
       throw err;
     }
@@ -230,7 +257,7 @@ class GoogleAuthService {
 
     // Sanitize requested role (prevent unauthorized escalation to ADMIN)
     const allowedRoles = ['PATIENT', 'HOSPITAL', 'DOCTOR'];
-    const role = allowedRoles.includes(requestedRole) ? requestedRole : 'PATIENT';
+    const role = allowedRoles.includes((requestedRole || '').toUpperCase()) ? requestedRole.toUpperCase() : 'PATIENT';
 
     const name = (profileData.name && String(profileData.name).trim()) || googleName;
 
@@ -250,6 +277,17 @@ class GoogleAuthService {
         err.status = 403;
         throw err;
       }
+
+      // Role verification for existing user during registration flow
+      const normRequested = (requestedRole || '').trim().toUpperCase();
+      const normUserRole = (user.role || '').toUpperCase();
+      if (normRequested && normUserRole !== normRequested) {
+        const err = new Error('Unable to sign in with this account using the selected sign-in option. Please use the appropriate sign-in method or contact support if you need assistance.');
+        err.code = 'ROLE_MISMATCH';
+        err.status = 403;
+        throw err;
+      }
+
       return { user, isNewUser: false };
     }
 
@@ -312,11 +350,11 @@ class GoogleAuthService {
   /**
    * Compatibility wrapper for legacy calls
    */
-  async authenticateGoogleUser({ idToken, requestedRole = 'PATIENT', isRegistration = false, profileData = {} }) {
+  async authenticateGoogleUser({ idToken, requestedRole, isRegistration = false, profileData = {} }) {
     if (isRegistration) {
-      return this.registerGoogleUser({ idToken, requestedRole, profileData });
+      return this.registerGoogleUser({ idToken, requestedRole: requestedRole || 'PATIENT', profileData });
     }
-    return this.authenticateGoogleLogin({ idToken });
+    return this.authenticateGoogleLogin({ idToken, requestedRole });
   }
 }
 

@@ -47,18 +47,20 @@ function statusToStage(status) {
  * `hospitalRequests` is an optional pre-joined relation array.
  */
 function buildCaseSnapshot(emergencyCase, hospitalRequests = []) {
-  const attempts = (hospitalRequests || []).map(hr => ({
-    hospitalId: hr.hospitalId,
-    hospitalName: hr.hospital?.name,
-    address: hr.hospital?.address,
-    photo: hr.hospital?.phone,
-    distanceKm: hr.distanceKm ?? null,
-    capabilities: hr.hospital?.capabilities || [],
-    status: hr.status,
-    requestedAt: hr.requestedAt,
-    respondedAt: hr.respondedAt,
-    rejectionReason: hr.rejectionReason,
-  }));
+  const attempts = (hospitalRequests || [])
+    .filter(hr => hr.requestedAt != null)
+    .map(hr => ({
+      hospitalId: hr.hospitalId,
+      hospitalName: hr.hospital?.name,
+      address: hr.hospital?.address,
+      photo: hr.hospital?.phone,
+      distanceKm: hr.distanceKm ?? null,
+      capabilities: hr.hospital?.capabilities || [],
+      status: hr.status,
+      requestedAt: hr.requestedAt,
+      respondedAt: hr.respondedAt,
+      rejectionReason: hr.rejectionReason,
+    }));
 
   return {
     id: emergencyCase.id,
@@ -87,11 +89,50 @@ function buildCaseSnapshot(emergencyCase, hospitalRequests = []) {
   };
 }
 
+async function verifyIdempotencyMatch(existingCase, { userId, emergencyType, symptoms, latitude, longitude }) {
+  const existingPatient = await prisma.patient.findUnique({
+    where: { id: existingCase.patientId },
+    select: { userId: true },
+  });
+
+  // 1. Ownership check: Must belong to same user
+  if (!existingPatient || existingPatient.userId !== userId) {
+    const err = new Error('Idempotency key conflict: Request owner mismatch.');
+    err.status = 409;
+    throw err;
+  }
+
+  // 2. Canonical Payload match: Compare normalized type, symptoms, coordinates
+  const normExistingType = String(existingCase.emergencyType || 'MEDICAL').toUpperCase();
+  const normType = String(emergencyType || 'MEDICAL').toUpperCase();
+
+  const normExistingSymptoms = String(existingCase.symptoms || 'Not provided').trim();
+  const normSymptoms = String(symptoms || 'Not provided').trim();
+
+  const existingLat = existingCase.location?.latitude != null ? Number(existingCase.location.latitude) : null;
+  const existingLng = existingCase.location?.longitude != null ? Number(existingCase.location.longitude) : null;
+
+  const latNum = Number(latitude);
+  const lngNum = Number(longitude);
+
+  const latMatches = existingLat === null || Math.abs(existingLat - latNum) < 0.0001;
+  const lngMatches = existingLng === null || Math.abs(existingLng - lngNum) < 0.0001;
+
+  if (normExistingType !== normType || normExistingSymptoms !== normSymptoms || !latMatches || !lngMatches) {
+    const err = new Error('Idempotency key conflict: Request payload mismatch.');
+    err.status = 409;
+    throw err;
+  }
+
+  return true;
+}
+
 const createEmergencyCase = async ({ userId, emergencyType, severity, latitude, longitude, symptoms, idempotencyKey, source, patientMedicalHistory }) => {
   // 0. Idempotency Check
   if (idempotencyKey) {
     const existingCase = await emergencyRepository.getEmergencyCaseByIdempotencyKey(idempotencyKey);
     if (existingCase) {
+      await verifyIdempotencyMatch(existingCase, { userId, emergencyType, symptoms, latitude, longitude });
       return {
         emergencyCase: existingCase,
         nearestHospitals: [], // For MVP, we just return empty array if returning existing case to avoid extra queries, or we can fetch them. Let's return empty array.
@@ -165,7 +206,7 @@ const createEmergencyCase = async ({ userId, emergencyType, severity, latitude, 
   const caseId = publicCaseId();
 
   // 4. Run Safety Rule Engine to determine final severity and priority
-  const safetyResult = safetyRuleEngineService.evaluateEmergency(emergencyType, severity, symptoms);
+  const safetyResult = safetyRuleEngineService.evaluateEmergency(emergencyType, severity, symptoms, source);
 
   const { encryptJSON } = require('../utils/crypto');
 
@@ -204,13 +245,20 @@ const createEmergencyCase = async ({ userId, emergencyType, severity, latitude, 
       medicalSummary: encryptedSummary,
     });
   } catch (error) {
-    if (error.code === 'P2002' && error.meta?.target?.includes('idempotencyKey')) {
-      const existingCase = await emergencyRepository.getEmergencyCaseByIdempotencyKey(idempotencyKey);
-      return {
-        emergencyCase: existingCase,
-        nearestHospitals: [],
-        isIdempotentResponse: true
-      };
+    if (error.code === 'P2002' && (String(error.meta?.target || '').toLowerCase().includes('idempotency') || String(error.message || '').toLowerCase().includes('idempotency'))) {
+      let existingCase = await emergencyRepository.getEmergencyCaseByIdempotencyKey(idempotencyKey);
+      if (!existingCase) {
+        await new Promise(r => setTimeout(r, 100));
+        existingCase = await emergencyRepository.getEmergencyCaseByIdempotencyKey(idempotencyKey);
+      }
+      if (existingCase) {
+        await verifyIdempotencyMatch(existingCase, { userId, emergencyType, symptoms, latitude, longitude });
+        return {
+          emergencyCase: existingCase,
+          nearestHospitals: [],
+          isIdempotentResponse: true
+        };
+      }
     }
     throw error;
   }
@@ -521,7 +569,8 @@ const acceptEmergencyCase = async (caseId, hospitalUserId) => {
 
   // 5. Automatically Share HealthPack (Phase 3 / P1)
   try {
-    await healthPackService.shareHealthPackWithHospital(emergencyCase.patientId, hospital.id, hospitalUserId);
+    const acceptanceTimestamp = updatedCase.acceptedAt || emergencyCase.acceptedAt || new Date();
+    await healthPackService.shareHealthPackWithHospital(emergencyCase.patientId, hospital.id, hospitalUserId, acceptanceTimestamp);
     console.log(`[P1 feature] HealthPack shared with hospital ${hospital.name}`);
   } catch (err) {
     console.warn("Failed to share HealthPack automatically:", err.message);

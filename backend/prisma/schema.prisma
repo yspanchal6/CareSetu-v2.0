@@ -15,6 +15,7 @@ enum Role {
   HOSPITAL
   DOCTOR
   ADMIN
+  CLINIC
 }
 
 enum UserStatus {
@@ -22,6 +23,14 @@ enum UserStatus {
   INACTIVE
   BLOCKED
   PENDING
+  PENDING_ACTIVATION
+}
+
+enum ProviderVerificationStatus {
+  PENDING_ADMIN_REVIEW
+  APPROVED
+  REJECTED
+  SUSPENDED
 }
 
 enum CaseStatus {
@@ -225,6 +234,9 @@ model User {
   status UserStatus @default(ACTIVE)
 
   isVerified Boolean @default(false)
+  isActivated Boolean @default(true)
+  mustChangePassword Boolean @default(false)
+  tokenVersion Int @default(1)
 
   lastLoginAt DateTime?
 
@@ -235,6 +247,10 @@ model User {
 
   patient  Patient?
   hospital Hospital?
+  clinic   Clinic?
+  doctorProfile DoctorProfile?
+  staffProfiles HospitalStaff[]
+  activationTokens DoctorActivationToken[]
 
   conversations Conversation[]
   notifications Notification[]
@@ -370,12 +386,144 @@ model Hospital {
   captureViolations CaptureViolation[]
   securityAppeals  HospitalSecurityAppeal[]
   viewSessions     SecureViewSession[]
+  staffMembers     HospitalStaff[]
 
   @@index([userId])
   @@index([emergencyAvailable])
   @@index([isVerified])
 
   @@map("hospitals")
+}
+
+// ============================================================
+// HOSPITAL STAFF
+// ============================================================
+
+model HospitalStaff {
+  id String @id @default(uuid())
+
+  hospitalId String
+  hospital   Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  name                 String
+  role                 String
+  specialty            String?
+  department           String?
+  staffId              String?
+  phone                String?
+  email                String?
+  dutyStatus           String   @default("OFF_DUTY")
+  clinicalRole         String?
+  dutyResponsibilities String?
+  isDefault            Boolean  @default(false)
+  isActive             Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([hospitalId])
+  @@index([userId])
+  @@index([dutyStatus])
+  @@index([isActive])
+
+  @@map("hospital_staff")
+}
+
+// ============================================================
+// DOCTOR ACTIVATION TOKEN
+// ============================================================
+
+model DoctorActivationToken {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique
+  hospitalId  String
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([hospitalId])
+  @@map("doctor_activation_tokens")
+}
+
+// ============================================================
+// DOCTOR PROFILE (INDEPENDENT / CLINICIAN)
+// ============================================================
+
+model DoctorProfile {
+  id                 String                     @id @default(uuid())
+  userId             String                     @unique
+  user               User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  fullName           String
+  specialty          String
+  subSpecialties     String[]
+  licenseNumber      String                     @unique
+  medicalCouncil     String
+  qualification      String
+  experienceYears    Int                        @default(0)
+  bio                String?
+
+  isIndependent      Boolean                    @default(true)
+  clinicAddress      String?
+  city               String?
+  state              String?
+  pincode            String?
+  location           Json?
+
+  verificationStatus ProviderVerificationStatus @default(PENDING_ADMIN_REVIEW)
+  rejectionReason    String?
+  reviewedAt         DateTime?
+  reviewedBy         String?
+
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+
+  @@index([specialty])
+  @@index([city])
+  @@index([verificationStatus])
+  @@map("doctor_profiles")
+}
+
+// ============================================================
+// CLINIC
+// ============================================================
+
+model Clinic {
+  id                 String                     @id @default(uuid())
+  userId             String                     @unique
+  user               User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name               String
+  registrationNumber String                     @unique
+  address            String
+  city               String
+  state              String
+  pincode            String
+  phone              String
+  email              String
+  services           String[]
+  specialties        String[]
+  location           Json
+  operatingHours     Json?
+
+  verificationStatus ProviderVerificationStatus @default(PENDING_ADMIN_REVIEW)
+  rejectionReason    String?
+  reviewedAt         DateTime?
+  reviewedBy         String?
+
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+
+  @@index([city])
+  @@index([state])
+  @@index([verificationStatus])
+  @@map("clinics")
 }
 
 // ============================================================
@@ -1321,4 +1469,21 @@ model OpaqueRoute {
   @@index([userId])
   @@index([expiresAt])
   @@map("opaque_routes")
+}
+
+model HospitalIdempotencyRecord {
+  id             String   @id @default(uuid())
+  operationId    String   @unique @map("operation_id")
+  actorUserId    String   @map("actor_user_id")
+  hospitalId     String   @map("hospital_id")
+  caseId         String   @map("case_id")
+  actionType     String   @map("action_type")
+  payloadHash    String   @map("payload_hash")
+  responseStatus Int      @map("response_status")
+  responseBody   String   @map("response_body")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([operationId])
+  @@index([hospitalId, caseId])
+  @@map("hospital_idempotency_records")
 }

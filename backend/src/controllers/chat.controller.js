@@ -17,35 +17,110 @@ const sendSchema = z.object({
 exports.sendMessage = async (req, res, next) => {
   try {
     const { message, conversationId, includeHealthPack } = sendSchema.parse(req.body);
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
 
     // SAFETY ENGINE FIRST — deterministic, before any LLM involvement.
     const safety = aiRedflag.detect(message);
 
-    // Resolve (or create) the conversation.
+    // GUEST CREDIT ENFORCEMENT & MESSAGE PERSISTENCE IN ONE SAFE TRANSACTION
     let conversation = null;
-    if (conversationId) {
-      conversation = await prisma.conversation.findFirst({
-        where: { id: conversationId, userId },
-      });
-      if (!conversation) {
-        return res.status(404).json({ error: 'Conversation not found.' });
+    let userMessageRecord = null;
+
+    if (req.user.isGuest || req.user.role === 'GUEST') {
+      try {
+        await prisma.$transaction(async (tx) => {
+          // 1. Acquire exclusive PostgreSQL row lock on the guest user record
+          const lockedUsers = await tx.$queryRaw`
+            SELECT "id" FROM "users" WHERE "id" = ${userId} FOR UPDATE;
+          `;
+          if (!lockedUsers || lockedUsers.length === 0) {
+            const err = new Error('Guest session not found.');
+            err.status = 404;
+            throw err;
+          }
+
+          // 2. Count existing USER messages belonging to this guest's conversations
+          const guestMessageCount = await tx.aIMessage.count({
+            where: {
+              role: 'USER',
+              conversation: { userId },
+            },
+          });
+
+          // 3. Strict 3-credit enforcement
+          if (guestMessageCount >= 3) {
+            const err = new Error('You have exhausted your 3 free guest AI credits. Please register or log in to continue using Doctor AI.');
+            err.status = 403;
+            err.code = 'GUEST_CREDITS_EXHAUSTED';
+            throw err;
+          }
+
+          // 4. Resolve or create conversation inside the locked transaction
+          if (conversationId) {
+            conversation = await tx.conversation.findFirst({
+              where: { id: conversationId, userId },
+            });
+            if (!conversation) {
+              const err = new Error('Conversation not found.');
+              err.status = 404;
+              throw err;
+            }
+          } else {
+            conversation = await tx.conversation.create({
+              data: {
+                userId,
+                title: message.slice(0, 60).trim() || 'New chat',
+              },
+            });
+          }
+
+          // 5. Persist the user message atomically before committing and releasing the lock
+          userMessageRecord = await tx.aIMessage.create({
+            data: { conversationId: conversation.id, role: 'USER', content: message },
+          });
+        }, {
+          isolationLevel: 'ReadCommitted',
+          maxWait: 5000,
+          timeout: 10000,
+        });
+      } catch (txErr) {
+        if (txErr.code === 'GUEST_CREDITS_EXHAUSTED' || txErr.status === 403) {
+          return res.status(403).json({
+            error: 'You have exhausted your 3 free guest AI credits. Please register or log in to continue using Doctor AI.',
+            isGuestRestricted: true,
+            code: 'GUEST_CREDITS_EXHAUSTED',
+            creditsRemaining: 0,
+          });
+        }
+        if (txErr.status === 404) {
+          return res.status(404).json({ error: txErr.message });
+        }
+        throw txErr;
       }
     } else {
-      conversation = await prisma.conversation.create({
-        data: {
-          userId,
-          title: message.slice(0, 60).trim() || 'New chat',
-        },
+      // Authenticated users flow — unconstrained by guest limits
+      if (conversationId) {
+        conversation = await prisma.conversation.findFirst({
+          where: { id: conversationId, userId },
+        });
+        if (!conversation) {
+          return res.status(404).json({ error: 'Conversation not found.' });
+        }
+      } else {
+        conversation = await prisma.conversation.create({
+          data: {
+            userId,
+            title: message.slice(0, 60).trim() || 'New chat',
+          },
+        });
+      }
+
+      userMessageRecord = await prisma.aIMessage.create({
+        data: { conversationId: conversation.id, role: 'USER', content: message },
       });
     }
 
     const started = Date.now();
-
-    // Persist the user message.
-    await prisma.aIMessage.create({
-      data: { conversationId: conversation.id, role: 'USER', content: message },
-    });
 
     // EMERGENCY → short-circuit; no LLM call, signal the frontend to redirect to SOS.
     if (safety.isEmergency) {
@@ -79,8 +154,9 @@ exports.sendMessage = async (req, res, next) => {
       });
     }
 
-    // HealthPack Context retrieval if authorized (registered users only)
+    // HealthPack Context & Verified Documents retrieval (registered users only)
     let patientContext = null;
+    let medicalDocuments = [];
     if (includeHealthPack && !req.user.isGuest && req.user.role !== 'GUEST') {
       const patient = await prisma.patient.findUnique({ where: { userId } });
       if (patient) {
@@ -93,11 +169,31 @@ exports.sendMessage = async (req, res, next) => {
           hypertensionStatus: patient.hypertensionStatus || 'UNKNOWN',
           medications: patient.medications || 'None recorded',
         };
+
+        // Retrieve verified patient medical documents with genuine extracted text
+        medicalDocuments = await prisma.medicalDocument.findMany({
+          where: {
+            patientId: patient.id,
+            processingStatus: 'COMPLETED',
+            extractedText: { not: null },
+          },
+          select: {
+            id: true,
+            fileName: true,
+            documentType: true,
+            extractedText: true,
+            extractedConditions: true,
+            extractedMedications: true,
+            extractedAllergies: true,
+          },
+          take: 2,
+          orderBy: { createdAt: 'desc' },
+        });
       }
     }
 
     // NON-EMERGENCY → AI client (sidecar → LLM → deterministic fallback).
-    const result = await aiClient.processMessage(message, safety, patientContext);
+    const result = await aiClient.processMessage(message, safety, patientContext, medicalDocuments);
 
     const VALID_AI_INTENTS = ['GENERAL_HEALTH', 'SYMPTOM_CHECK', 'EMERGENCY', 'MEDICATION', 'FIRST_AID', 'HOSPITAL_SEARCH', 'HEALTH_PACK', 'APPOINTMENT', 'OTHER'];
     const safeIntent = VALID_AI_INTENTS.includes(safety.intent) ? safety.intent : 'GENERAL_HEALTH';

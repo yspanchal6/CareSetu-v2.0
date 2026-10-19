@@ -77,7 +77,9 @@
     "roles": "भूमिका आणि परवानग्या",
     "login": "साइन इन करा",
     "register": "खाते नोंदवा",
-    "logout": "साइन आउट"
+    "logout": "साइन आउट",
+    "team": "आमची टीम",
+    "services": "सेवा"
   },
   "dashboard": {
     "goodMorning": "शुभ प्रभात",

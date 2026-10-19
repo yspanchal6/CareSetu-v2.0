@@ -73,9 +73,17 @@ async function sendIdempotentSecurityEmail({
 
   // 3. Persist Delivery Audit Record (Outbox)
   try {
+    let validUserId = null;
+    if (hospitalUserId) {
+      const userExists = await prisma.user.findUnique({
+        where: { id: hospitalUserId },
+        select: { id: true },
+      });
+      if (userExists) validUserId = userExists.id;
+    }
     await prisma.auditLog.create({
       data: {
-        userId: hospitalUserId || null,
+        userId: validUserId,
         action: 'CAPTURE_VIOLATION',
         entity: 'HospitalSecurityStatus',
         entityId: hospitalId,

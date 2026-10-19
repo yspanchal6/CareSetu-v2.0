@@ -112,6 +112,75 @@ const signupRoles = [
   },
 ];
 
+const teamMembers = [
+  {
+    name: "Panchal Yash",
+    role: "Team Lead",
+    badge: "Team Lead",
+    photo: "/team-verify/yash_clean.png",
+    imageFit: "object-cover",
+    imagePosition: "object-center",
+    responsibilities:
+      "Responsible for overall project planning, team coordination, and technical execution. Manages backend integration, authentication and authorization, cybersecurity standards, testing, and deployment preparation.",
+    tags: ["Team Coordination", "Project Planning", "Backend Integration", "Cybersecurity", "Testing"],
+  },
+  {
+    name: "Princy Prajapati",
+    role: "AI/ML Developer",
+    badge: "AI & ML",
+    photo: "/team-verify/princy_prajapati_clean.png",
+    imageFit: "object-cover",
+    imagePosition: "object-center",
+    responsibilities:
+      "Handles dataset preprocessing and AI/ML model development and evaluation. Supports AI integration into the platform, model testing, and AI-related backend workflows.",
+    tags: ["Data Preprocessing", "Model Development", "Model Evaluation", "AI Integration", "Testing"],
+  },
+  {
+    name: "Kritika Singh",
+    role: "UI/UX & Frontend Developer",
+    badge: "UI/UX & Frontend",
+    photo: "/team-verify/kritika_singh_clean.png",
+    imageFit: "object-cover",
+    imagePosition: "object-center",
+    responsibilities:
+      "Creates user interface designs and prototypes in Figma. Builds responsive frontend layouts using React and TypeScript, focusing on accessibility and seamless API integration.",
+    tags: ["Figma", "UI/UX Design", "React", "TypeScript", "Accessibility"],
+  },
+  {
+    name: "Nensi Parmar",
+    role: "Database & Data Integration",
+    badge: "Data & Database",
+    photo: "/team-verify/nensi_parmar.jpeg",
+    imageFit: "object-cover",
+    imagePosition: "object-center",
+    responsibilities:
+      "Designs the database structure, Prisma schemas, and entity relationships while maintaining data integrity. Manages query formulation, database integration, and database security.",
+    tags: ["Prisma Schema", "Database Design", "Data Integrity", "Queries", "Database Security"],
+  },
+  {
+    name: "Himanshu",
+    role: "Research & Documentation",
+    badge: "Domain Research",
+    photo: "/team-verify/himanshu.png",
+    imageFit: "object-cover",
+    imagePosition: "object-[center_15%]",
+    responsibilities:
+      "Conducts problem-statement research, requirements gathering, and healthcare-domain studies. Prepares comprehensive project documentation, testing checklists, and progress tracking reports.",
+    tags: ["Problem Research", "Healthcare Domain", "Requirements", "Documentation", "QA Checklists"],
+  },
+  {
+    name: "Siddiqui Affan",
+    role: "Presentation & Research",
+    badge: "Strategy & Pitching",
+    photo: "/team-verify/siddiqui-affan-professional.png",
+    imageFit: "object-cover",
+    imagePosition: "object-center",
+    responsibilities:
+      "Leads presentation design, slide preparation, and competition pitching strategy. Delivers demo storytelling and conducts market research to support competition presentation.",
+    tags: ["PPT Preparation", "Pitching Strategy", "Demo Storytelling", "Market Research", "Presentation"],
+  },
+];
+
 export default function LandingPage() {
   const navigate = useNavigate();
   const { isAuthenticated, startGuestSession } = useAuth();
@@ -216,9 +285,15 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-5 sm:px-8 grid lg:grid-cols-12 gap-10 items-center relative z-10">
           {/* Left Text Column */}
           <div className="lg:col-span-6 space-y-6">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-50 border border-sky-200/80 text-sky-700 text-xs font-semibold tracking-tight shadow-2xs animate-hero-stagger">
-              <Sparkles className="w-3.5 h-3.5 text-sky-500" />
-              <span>Emergency care coordination</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-50 border border-sky-200/80 text-sky-700 text-xs font-semibold tracking-tight shadow-2xs animate-hero-stagger">
+                <Sparkles className="w-3.5 h-3.5 text-sky-500" />
+                <span>Emergency care coordination</span>
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold tracking-tight shadow-2xs animate-hero-stagger">
+                <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                <span>3 Free AI Credits for Guest Triage</span>
+              </div>
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-900 leading-[1.08] tracking-tight animate-hero-stagger [animation-delay:150ms]">
@@ -282,14 +357,14 @@ export default function LandingPage() {
 
           {/* RIGHT — EMERGENCY ORBIT */}
           <div
-            className="lg:col-span-6 relative aspect-square max-w-md mx-auto w-full transition-transform duration-300 ease-out animate-hero-stagger [animation-delay:300ms]"
+            className="lg:col-span-6 relative aspect-square max-w-[330px] xs:max-w-[370px] sm:max-w-md mx-auto w-full my-6 lg:my-0 transition-transform duration-300 ease-out animate-hero-stagger [animation-delay:300ms]"
             style={{
               transform: `translate(${mousePos.x * -0.2}px, ${mousePos.y * -0.2
                 }px)`,
             }}
           >
             {/* Outer Dotted Circle (Light Sky-Blue, Dashed, Slightly Larger) */}
-            <div className="absolute inset-0 rounded-full border-2 border-dashed border-sky/30 animate-[spin_60s_linear_infinite]" />
+            <div className="absolute inset-0 rounded-full border-2 border-dashed border-sky-400/30 animate-[spin_60s_linear_infinite]" />
             {/* Inner Solid Circle (Light Slate/Blue, Solid, Follows Node Orbit) */}
             <div className="absolute inset-8 rounded-full border border-slate-200/80 animate-[spin_40s_linear_infinite_reverse]" />
 
@@ -299,7 +374,7 @@ export default function LandingPage() {
                 const angle =
                   (i / journeySteps.length) * 2 * Math.PI - Math.PI / 2;
 
-                const r = 42;
+                const r = 38;
 
                 const x = 50 + r * Math.cos(angle);
                 const y = 50 + r * Math.sin(angle);
@@ -556,6 +631,92 @@ export default function LandingPage() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* PEOPLE BEHIND CARESETU / OUR TEAM SECTION */}
+      <section
+        id="team"
+        className="max-w-7xl mx-auto px-5 sm:px-8 py-20 lg:py-24 border-t border-slate-200/80 dark:border-slate-800/80"
+        aria-labelledby="our-team-heading"
+      >
+        <div className="text-center max-w-3xl mx-auto mb-14 sm:mb-16">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-sky-50 dark:bg-sky-950/60 border border-sky-200/80 dark:border-sky-800/70 text-sky-700 dark:text-sky-300 text-xs font-semibold uppercase tracking-wider mb-4 shadow-xs">
+            <Users className="w-3.5 h-3.5" />
+            <span>People Behind CareSetu</span>
+          </div>
+
+          <h2
+            id="our-team-heading"
+            className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 dark:text-white tracking-tight"
+          >
+            Meet the Builders of CareSetu
+          </h2>
+
+          <p className="mt-4 text-slate-600 dark:text-slate-300 text-base sm:text-lg leading-relaxed">
+            A multidisciplinary engineering team combining distributed systems, clinical AI triage,
+            accessible UI/UX, and healthcare domain research to connect patients and hospitals when every second counts.
+          </p>
+        </div>
+
+        {/* 6-member responsive grid: 1 col on mobile, 2 cols on tablet, 3 cols on desktop */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+          {teamMembers.map((member) => (
+            <div
+              key={member.name}
+              className="group relative flex flex-col h-full bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-sm hover:shadow-xl hover:border-sky-300 dark:hover:border-sky-600/60 transition-all duration-300 overflow-hidden"
+            >
+              {/* Identical Portrait Container across all 6 cards */}
+              <div className="relative w-full aspect-[4/5] overflow-hidden bg-slate-100 dark:bg-slate-800/80 border-b border-slate-100 dark:border-slate-800 flex items-center justify-center">
+                <img
+                  src={member.photo}
+                  alt={`${member.name} - ${member.role}`}
+                  loading="lazy"
+                  className={`w-full h-full ${member.imageFit || "object-cover"} transition-transform duration-500 group-hover:scale-105 motion-reduce:transform-none ${member.imagePosition}`}
+                />
+              </div>
+
+              {/* Card Body */}
+              <div className="p-6 flex flex-col flex-1">
+                {/* 2. Member Name directly below photograph */}
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight group-hover:text-sky-600 dark:group-hover:text-sky-400 transition-colors">
+                    {member.name}
+                  </h3>
+                </div>
+
+                {/* 3. Role Badge below the name */}
+                <div className="mt-2.5 mb-3 flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border border-sky-200/80 dark:border-sky-800/60">
+                    <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse motion-reduce:animate-none" />
+                    {member.badge}
+                  </span>
+                  {member.role !== member.badge && (
+                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                      • {member.role}
+                    </span>
+                  )}
+                </div>
+
+                {/* 4. Responsibilities and Skills below the role */}
+                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed flex-1">
+                  {member.responsibilities}
+                </p>
+
+                {/* Tags / Focus Skills */}
+                <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap gap-1.5">
+                  {member.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="px-2.5 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 

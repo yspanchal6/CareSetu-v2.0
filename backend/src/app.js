@@ -26,6 +26,7 @@ const hospitalMatchingRoutes = require('./routes/hospital-matching.routes');
 const hospitalSecurityRoutes = require('./routes/hospital-security.routes');
 const urlTokenRoutes = require('./routes/url-token.routes');
 const opaqueRouteRoutes = require('./routes/opaque-route.routes');
+const clinicRoutes = require('./routes/clinic.routes');
 
 const app = express();
 
@@ -45,7 +46,9 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin) || /\.trycloudflare\.com$/.test(origin)) {
+    // In non-production environments only, permit temporary trycloudflare tunnels
+    const allowTunnel = process.env.NODE_ENV !== 'production' && /\.trycloudflare\.com$/.test(origin || '');
+    if (!origin || allowedOrigins.includes(origin) || allowTunnel) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -72,6 +75,9 @@ app.use('/api/auth', authRoutes);
 app.use('/api/emergency', emergencyRoutes);
 app.use('/api/hospitals', hospitalRoutes);
 app.use('/api/doctors', doctorRoutes);
+app.use('/api/doctor', doctorRoutes);
+app.use('/api/clinics', clinicRoutes);
+app.use('/api/clinic', clinicRoutes);
 app.use('/api/admin', adminLimiter, adminRoutes);
 app.use('/api/admin/gov-health-data', adminLimiter, govHealthDataRoutes);
 app.use('/api/admin/hospital-matching', adminLimiter, hospitalMatchingRoutes);

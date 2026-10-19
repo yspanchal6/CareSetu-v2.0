@@ -27,7 +27,7 @@ export default function PublicFooter() {
 
   return (
     <footer className="bg-navy text-white mt-24">
-      <div className="max-w-7xl mx-auto px-5 sm:px-8 py-14 grid grid-cols-2 md:grid-cols-4 gap-8">
+      <div className="max-w-7xl mx-auto px-5 sm:px-8 py-14 grid grid-cols-2 md:grid-cols-5 gap-8">
         <div className="col-span-2 md:col-span-1">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-sky flex items-center justify-center">
@@ -49,7 +49,16 @@ export default function PublicFooter() {
           <p className="text-sm font-semibold text-white/90 mb-3">Company</p>
           <ul className="space-y-2 text-sm text-white/60">
             <li><Link to="/about" className="hover:text-white">About</Link></li>
+            <li><a href="/#team" className="hover:text-white">Our Team</a></li>
             <li><Link to="/contact" className="hover:text-white">Contact</Link></li>
+          </ul>
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-white/90 mb-3">Legal &amp; Privacy</p>
+          <ul className="space-y-2 text-sm text-white/60">
+            <li><Link to="/terms" className="hover:text-white">Terms of Use</Link></li>
+            <li><Link to="/privacy" className="hover:text-white">Privacy Policy</Link></li>
+            <li><Link to="/data-declaration" className="hover:text-white">Data Declaration</Link></li>
           </ul>
         </div>
         <div>
@@ -64,8 +73,14 @@ export default function PublicFooter() {
           </ul>
         </div>
       </div>
-      <div className="border-t border-white/10 py-5 text-center text-xs text-white/40">
-        © 2026 CareSetu. All rights reserved.
+      <div className="border-t border-white/10 py-5 text-center text-xs text-white/40 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4">
+        <span>© 2026 CareSetu. All rights reserved.</span>
+        <span className="hidden sm:inline">&bull;</span>
+        <div className="flex gap-4">
+          <Link to="/terms" className="hover:text-white/70">Terms</Link>
+          <Link to="/privacy" className="hover:text-white/70">Privacy</Link>
+          <Link to="/data-declaration" className="hover:text-white/70">Data Declaration</Link>
+        </div>
       </div>
     </footer>
   );

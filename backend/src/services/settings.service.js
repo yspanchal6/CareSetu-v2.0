@@ -57,6 +57,33 @@ async function getProfile(userId) {
           location: true,
         },
       },
+      doctorProfile: {
+        select: {
+          id: true,
+          fullName: true,
+          specialty: true,
+          licenseNumber: true,
+          qualification: true,
+          experienceYears: true,
+          bio: true,
+          clinicAddress: true,
+          city: true,
+          state: true,
+          verificationStatus: true,
+        },
+      },
+      staffProfiles: {
+        where: { isActive: true },
+        select: {
+          id: true,
+          name: true,
+          role: true,
+          department: true,
+          dutyStatus: true,
+          hospitalId: true,
+          hospital: { select: { id: true, name: true } },
+        },
+      },
     },
   });
 
@@ -83,6 +110,8 @@ async function getProfile(userId) {
     },
     patientProfile: user.patient || null,
     hospitalProfile: user.hospital || null,
+    doctorProfile: user.doctorProfile || null,
+    staffProfiles: user.staffProfiles || [],
   };
 }
 
@@ -96,6 +125,8 @@ async function updateProfile(userId, updateData) {
     include: {
       patient: true,
       hospital: true,
+      doctorProfile: true,
+      clinic: true,
     },
   });
 
@@ -116,9 +147,11 @@ async function updateProfile(userId, updateData) {
   delete updateData.email;
   delete updateData.phone;
 
+  const trimmedName = updateData.name ? String(updateData.name).trim() : null;
+
   if (user.role === 'PATIENT') {
     const patientFields = {};
-    if (updateData.name !== undefined) patientFields.name = String(updateData.name).trim();
+    if (trimmedName) patientFields.name = trimmedName;
     if (updateData.age !== undefined) patientFields.age = Number(updateData.age);
     if (updateData.gender !== undefined) patientFields.gender = String(updateData.gender).trim();
     if (updateData.phone !== undefined) patientFields.phone = String(updateData.phone).trim();
@@ -133,22 +166,42 @@ async function updateProfile(userId, updateData) {
     if (updateData.emergencyContacts !== undefined) patientFields.emergencyContacts = updateData.emergencyContacts;
     if (updateData.location !== undefined) patientFields.location = updateData.location;
 
+    let updatedPatient = null;
     if (user.patient) {
-      await prisma.patient.update({
+      updatedPatient = await prisma.patient.update({
         where: { id: user.patient.id },
         data: patientFields,
+      });
+    } else {
+      updatedPatient = await prisma.patient.create({
+        data: {
+          name: trimmedName || user.name || 'Patient',
+          age: Number(updateData.age) || 0,
+          gender: updateData.gender ? String(updateData.gender).trim() : 'UNSPECIFIED',
+          phone: '',
+          ...patientFields,
+          user: { connect: { id: user.id } },
+        },
+      });
+    }
+
+    // Always keep root User.name synchronized with patient name
+    if (trimmedName) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { name: trimmedName },
       });
     }
 
     // Keep the patient's active encrypted HealthPack in sync with profile changes.
     try {
-      await healthPackService.refreshHealthPackFromPatient(user.patient.id);
+      await healthPackService.refreshHealthPackFromPatient(updatedPatient.id);
     } catch (hpErr) {
       console.warn('[Settings] HealthPack profile sync warning:', hpErr.message);
     }
   } else if (user.role === 'HOSPITAL') {
     const hospitalFields = {};
-    if (updateData.name !== undefined) hospitalFields.name = String(updateData.name).trim();
+    if (trimmedName) hospitalFields.name = trimmedName;
     if (updateData.address !== undefined) hospitalFields.address = String(updateData.address).trim();
     if (updateData.phone !== undefined) hospitalFields.phone = String(updateData.phone).trim();
     if (updateData.email !== undefined) hospitalFields.email = String(updateData.email).trim();
@@ -172,14 +225,45 @@ async function updateProfile(userId, updateData) {
         data: hospitalFields,
       });
     }
-  }
 
-  // Update root User fields if provided
-  if (updateData.name && !user.patient && !user.hospital) {
-    await prisma.user.update({
-      where: { id: userId },
-      data: { name: String(updateData.name).trim() },
-    });
+    if (trimmedName) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { name: trimmedName },
+      });
+    }
+  } else if (user.role === 'DOCTOR') {
+    const doctorFields = {};
+    if (trimmedName) doctorFields.fullName = trimmedName;
+    if (updateData.specialty !== undefined) doctorFields.specialty = String(updateData.specialty).trim();
+    if (updateData.qualification !== undefined) doctorFields.qualification = String(updateData.qualification).trim();
+    if (updateData.experienceYears !== undefined) doctorFields.experienceYears = Number(updateData.experienceYears);
+    if (updateData.clinicAddress !== undefined) doctorFields.clinicAddress = String(updateData.clinicAddress).trim();
+    if (updateData.city !== undefined) doctorFields.city = String(updateData.city).trim();
+    if (updateData.state !== undefined) doctorFields.state = String(updateData.state).trim();
+    if (updateData.bio !== undefined) doctorFields.bio = String(updateData.bio).trim();
+
+    if (user.doctorProfile) {
+      await prisma.doctorProfile.update({
+        where: { userId },
+        data: doctorFields,
+      });
+    }
+
+    if (trimmedName) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { name: trimmedName },
+      });
+    }
+  } else {
+    // Other roles: update root User name directly
+    if (trimmedName) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { name: trimmedName },
+      });
+    }
   }
 
   // Audit Log

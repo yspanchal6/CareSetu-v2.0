@@ -1,4 +1,28 @@
 const prisma = require('../config/prisma');
+const medicalDocumentService = require('../services/medical-document.service');
+
+const DOCTOR_VERIFICATION_DOCUMENT_TYPES = ['MEDICAL_LICENSE', 'GOVT_ID'];
+
+function getDoctorVerificationDocumentMetadata(document, userId) {
+  if (!document || !DOCTOR_VERIFICATION_DOCUMENT_TYPES.includes(document.documentType)) {
+    return null;
+  }
+
+  try {
+    const metadata = JSON.parse(document.extractedText || '');
+    if (
+      metadata.isVerificationDoc !== true ||
+      metadata.userId !== userId ||
+      metadata.documentType !== document.documentType
+    ) {
+      return null;
+    }
+
+    return { id: document.id, documentType: document.documentType };
+  } catch {
+    return null;
+  }
+}
 
 // 1. Get Dashboard Statistics
 exports.getDashboardStats = async (req, res, next) => {
@@ -1033,6 +1057,265 @@ exports.getAnalytics = async (req, res, next) => {
   }
 };
 
+// 12. Provider Verification & Review (Independent Doctors & Clinics)
+exports.getPendingProviders = async (req, res, next) => {
+  try {
+    const { status, type } = req.query;
+    const statusFilter = status && status !== 'ALL' ? status : (status === 'ALL' ? undefined : 'PENDING_ADMIN_REVIEW');
+    const typeFilter = (type || 'ALL').toUpperCase();
 
+    let doctorProfiles = [];
+    let clinics = [];
 
+    if (typeFilter === 'ALL' || typeFilter === 'DOCTOR') {
+      doctorProfiles = await prisma.doctorProfile.findMany({
+        where: statusFilter ? { verificationStatus: statusFilter } : undefined,
+        include: {
+          user: {
+            select: { id: true, email: true, status: true, createdAt: true }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+    }
 
+    if (typeFilter === 'ALL' || typeFilter === 'CLINIC') {
+      clinics = await prisma.clinic.findMany({
+        where: statusFilter ? { verificationStatus: statusFilter } : undefined,
+        include: {
+          user: {
+            select: { id: true, email: true, status: true, createdAt: true }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+    }
+
+    const formattedDoctors = await Promise.all(doctorProfiles.map(async (dp) => {
+      const documents = dp.userId
+        ? await prisma.medicalDocument.findMany({
+          where: {
+            documentType: { in: DOCTOR_VERIFICATION_DOCUMENT_TYPES },
+            extractedText: { contains: `"userId":"${dp.userId}"` }
+          },
+          select: { id: true, documentType: true, extractedText: true }
+        })
+        : [];
+
+      return {
+        id: dp.id,
+        userId: dp.userId,
+        providerType: 'DOCTOR',
+        name: dp.fullName,
+        email: dp.user?.email,
+        registrationNumber: dp.licenseNumber,
+        medicalCouncil: dp.medicalCouncil,
+        qualification: dp.qualification,
+        specialty: dp.specialty,
+        subSpecialties: dp.subSpecialties,
+        experienceYears: dp.experienceYears,
+        city: dp.city,
+        state: dp.state,
+        clinicAddress: dp.clinicAddress,
+        verificationStatus: dp.verificationStatus,
+        rejectionReason: dp.rejectionReason,
+        reviewedAt: dp.reviewedAt,
+        reviewedBy: dp.reviewedBy,
+        submittedAt: dp.createdAt,
+        documents: documents
+          .map((document) => getDoctorVerificationDocumentMetadata(document, dp.userId))
+          .filter(Boolean)
+      };
+    }));
+
+    const formattedProviders = [
+      ...formattedDoctors,
+      ...clinics.map(c => ({
+        id: c.id,
+        userId: c.userId,
+        providerType: 'CLINIC',
+        name: c.name,
+        email: c.email || c.user?.email,
+        phone: c.phone,
+        registrationNumber: c.registrationNumber,
+        address: c.address,
+        city: c.city,
+        state: c.state,
+        pincode: c.pincode,
+        services: c.services,
+        specialties: c.specialties,
+        operatingHours: c.operatingHours,
+        verificationStatus: c.verificationStatus,
+        rejectionReason: c.rejectionReason,
+        reviewedAt: c.reviewedAt,
+        reviewedBy: c.reviewedBy,
+        submittedAt: c.createdAt
+      }))
+    ].sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
+
+    res.json({
+      success: true,
+      count: formattedProviders.length,
+      providers: formattedProviders
+    });
+  } catch (error) {
+    console.error('[AdminProviderReview] Error fetching providers:', error);
+    next(error);
+  }
+};
+
+exports.reviewProvider = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { decision, providerType, reviewNotes } = req.body;
+
+    if (!['APPROVED', 'REJECTED', 'SUSPENDED'].includes(decision)) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_DECISION',
+        message: 'Decision must be APPROVED, REJECTED, or SUSPENDED.'
+      });
+    }
+
+    const type = (providerType || '').toUpperCase();
+    let updatedRecord = null;
+    let targetType = type;
+
+    if (type === 'DOCTOR' || !type) {
+      const existing = await prisma.doctorProfile.findUnique({ where: { id } });
+      if (existing) {
+        targetType = 'DOCTOR';
+        updatedRecord = await prisma.doctorProfile.update({
+          where: { id },
+          data: {
+            verificationStatus: decision,
+            reviewedAt: new Date(),
+            reviewedBy: req.user.id,
+            rejectionReason: decision === 'REJECTED' ? (reviewNotes || 'Administrative review rejected') : null
+          }
+        });
+      }
+    }
+
+    if (!updatedRecord && (type === 'CLINIC' || !type)) {
+      const existing = await prisma.clinic.findUnique({ where: { id } });
+      if (existing) {
+        targetType = 'CLINIC';
+        updatedRecord = await prisma.clinic.update({
+          where: { id },
+          data: {
+            verificationStatus: decision,
+            reviewedAt: new Date(),
+            reviewedBy: req.user.id,
+            rejectionReason: decision === 'REJECTED' ? (reviewNotes || 'Administrative review rejected') : null
+          }
+        });
+      }
+    }
+
+    if (!updatedRecord) {
+      return res.status(404).json({
+        success: false,
+        error: 'PROVIDER_NOT_FOUND',
+        message: 'No matching doctor profile or clinic found for this ID.'
+      });
+    }
+
+    // Immutable audit log
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user.id,
+        action: 'ADMIN_ACTION',
+        entity: targetType === 'CLINIC' ? 'Clinic' : 'DoctorProfile',
+        details: {
+          action: 'PROVIDER_CREDENTIAL_REVIEW',
+          providerId: id,
+          providerType: targetType,
+          decision,
+          reviewNotes: reviewNotes || null,
+          timestamp: new Date().toISOString()
+        }
+      }
+    });
+
+    res.json({
+      success: true,
+      message: `Provider successfully marked as ${decision}`,
+      provider: updatedRecord
+    });
+  } catch (error) {
+    console.error('[AdminProviderReview] Error reviewing provider:', error);
+    next(error);
+  }
+};
+
+exports.getProviderDocument = async (req, res, next) => {
+  try {
+    const { id: providerId, docId } = req.params;
+    if (!docId || docId.includes('..') || docId.includes('/') || docId.includes('\\')) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_DOCUMENT_ID',
+        message: 'Requested provider document ID is invalid.'
+      });
+    }
+
+    const provider = await prisma.doctorProfile.findUnique({
+      where: { id: providerId },
+      select: { userId: true }
+    });
+    if (!provider) {
+      return res.status(404).json({
+        success: false,
+        error: 'PROVIDER_NOT_FOUND',
+        message: 'Requested doctor provider does not exist.'
+      });
+    }
+
+    const document = await prisma.medicalDocument.findUnique({
+      where: { id: docId },
+      select: { id: true, documentType: true, extractedText: true }
+    });
+    if (!getDoctorVerificationDocumentMetadata(document, provider.userId)) {
+      return res.status(404).json({
+        success: false,
+        error: 'DOCUMENT_NOT_FOUND',
+        message: 'Requested verification document does not exist for this provider.'
+      });
+    }
+
+    const fileInfo = await medicalDocumentService.getDocumentFilePath(docId, req.user);
+    const safeFileName = (fileInfo.fileName || 'document')
+      .replace(/[\r\n"'\\]/g, '_')
+      .replace(/[^\x20-\x7E]/g, '');
+    const lowerName = safeFileName.toLowerCase();
+    let contentType = 'application/octet-stream';
+    if (fileInfo.fileType === 'PDF' || lowerName.endsWith('.pdf')) {
+      contentType = 'application/pdf';
+    } else if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) {
+      contentType = 'image/jpeg';
+    } else if (lowerName.endsWith('.png')) {
+      contentType = 'image/png';
+    }
+
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `inline; filename="${safeFileName}"`);
+    return res.sendFile(fileInfo.fullPath);
+  } catch (error) {
+    if (error.message.includes('Invalid document ID') || error.message.includes('traversal')) {
+      return res.status(400).json({ success: false, error: 'INVALID_DOCUMENT_ID' });
+    }
+    if (error.message.includes('not found') || error.message.includes('File not found')) {
+      return res.status(404).json({ success: false, error: 'DOCUMENT_NOT_FOUND' });
+    }
+    if (error.message.includes('Access denied')) {
+      return res.status(403).json({ success: false, error: 'DOCUMENT_ACCESS_DENIED' });
+    }
+    console.error('[AdminProviderReview] Error streaming document:', error);
+    next(error);
+  }
+};

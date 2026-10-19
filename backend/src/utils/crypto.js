@@ -7,19 +7,39 @@ const ALGORITHM = 'aes-256-cbc';
  * @returns {Buffer} 32-byte secret key buffer
  */
 function getSecretKeyBuffer(overrideKey) {
-  const rawKey = overrideKey || process.env.HEALTH_PACK_KEY || process.env.HEALTH_PACK_SECRET_KEY || '12345678901234567890123456789012';
+  const isProd = process.env.NODE_ENV === 'production';
+  const rawKey = overrideKey || process.env.HEALTH_PACK_KEY || process.env.HEALTH_PACK_SECRET_KEY;
+
+  if (!rawKey) {
+    if (isProd) {
+      throw new Error('[SECURITY FATAL] HEALTH_PACK_KEY is required in production environment.');
+    }
+    // Safe deterministic development/test fallback
+    return Buffer.from('12345678901234567890123456789012', 'utf-8');
+  }
+
   if (Buffer.isBuffer(rawKey)) {
     if (rawKey.length === 32) return rawKey;
+    if (isProd) {
+      throw new Error('[SECURITY FATAL] HEALTH_PACK_KEY buffer must be exactly 32 bytes in production.');
+    }
     const buf = Buffer.alloc(32);
     rawKey.copy(buf, 0, 0, Math.min(rawKey.length, 32));
     return buf;
   }
-  const str = String(rawKey);
+
+  const str = String(rawKey).trim();
   if (/^[0-9a-fA-F]{64}$/.test(str)) {
     return Buffer.from(str, 'hex');
   }
+
   const buf = Buffer.from(str, 'utf-8');
   if (buf.length === 32) return buf;
+
+  if (isProd) {
+    throw new Error('[SECURITY FATAL] HEALTH_PACK_KEY must be a 32-byte UTF-8 string or a 64-character hex string in production.');
+  }
+
   const res = Buffer.alloc(32);
   buf.copy(res, 0, 0, Math.min(buf.length, 32));
   return res;

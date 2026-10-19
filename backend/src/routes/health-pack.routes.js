@@ -15,9 +15,9 @@ router.post('/', auth, authorize('PATIENT'), createHealthPack);
 router.get('/my-pack', auth, authorize('PATIENT'), getMyHealthPack);
 router.post('/share', auth, authorize('PATIENT'), shareHealthPack);
 
-// Hospital routes
-router.get('/case/:caseId', auth, authorize('HOSPITAL'), getCaseHealthPack);
-router.get('/shared/:packId', auth, authorize('HOSPITAL'), getSharedHealthPack);
-router.get('/:caseId', auth, authorize('HOSPITAL'), getCaseHealthPack);
+// Hospital / Doctor / Admin case HealthPack routes
+router.get('/case/:caseId', auth, authorize('HOSPITAL', 'DOCTOR', 'ADMIN'), getCaseHealthPack);
+router.get('/shared/:packId', auth, authorize('HOSPITAL', 'DOCTOR', 'ADMIN'), getSharedHealthPack);
+router.get('/:caseId', auth, authorize('HOSPITAL', 'DOCTOR', 'ADMIN'), getCaseHealthPack);
 
 module.exports = router;

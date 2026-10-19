@@ -14,14 +14,23 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: (req, file, cb) => {
-    const allowedMimeTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+    const allowedMimeTypes = [
+      'application/pdf',
+      'image/jpeg',
+      'image/png',
+      'image/jpg',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/msword',
+      'application/zip',
+      'application/octet-stream',
+    ];
     const ext = path.extname(file.originalname || '').toLowerCase();
-    const allowedExts = ['.pdf', '.jpg', '.jpeg', '.png'];
+    const allowedExts = ['.pdf', '.jpg', '.jpeg', '.png', '.docx'];
 
     if (allowedMimeTypes.includes(file.mimetype) && allowedExts.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file format. Allowed formats: PDF, JPG, PNG.'));
+      cb(new Error('Invalid file format. Allowed formats: PDF, JPG, PNG, DOCX.'));
     }
   },
 });
@@ -47,10 +56,10 @@ router.use(auth, denyGuest);
 
 router.post('/', authorize('PATIENT'), handleMulterUpload, uploadDocument);
 router.get('/my-documents', authorize('PATIENT'), getMyDocuments);
-router.get('/:documentId/view', auth, authorize('PATIENT', 'HOSPITAL'), viewDocument);
-router.get('/:documentId/download', auth, authorize('PATIENT', 'HOSPITAL'), downloadDocument);
-router.get('/download/:documentId', auth, authorize('PATIENT', 'HOSPITAL'), downloadDocument);
-router.get('/:documentId', auth, authorize('PATIENT', 'HOSPITAL'), downloadDocument);
+router.get('/:documentId/view', auth, authorize('PATIENT', 'HOSPITAL', 'DOCTOR', 'ADMIN'), viewDocument);
+router.get('/:documentId/download', auth, authorize('PATIENT', 'HOSPITAL', 'DOCTOR', 'ADMIN'), downloadDocument);
+router.get('/download/:documentId', auth, authorize('PATIENT', 'HOSPITAL', 'DOCTOR', 'ADMIN'), downloadDocument);
+router.get('/:documentId', auth, authorize('PATIENT', 'HOSPITAL', 'DOCTOR', 'ADMIN'), downloadDocument);
 router.delete('/:documentId', authorize('PATIENT'), deleteDocument);
 
 module.exports = router;
