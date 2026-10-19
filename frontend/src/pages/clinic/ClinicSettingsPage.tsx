@@ -9,7 +9,7 @@ import { useAuth } from "../../context/AuthContext";
 import { DeleteAccountSection } from "../../components/common/DeleteAccountSection";
 
 export default function ClinicSettingsPage() {
-  const { toast } = useToast();
+  const { showToast } = useToast();
   const { user } = useAuth();
 
   const isGoogleAccount = Boolean((user as any)?.hasPassword === false);
@@ -24,20 +24,12 @@ export default function ClinicSettingsPage() {
     e.preventDefault();
 
     if (newPassword !== confirmPassword) {
-      toast({
-        title: "Password Mismatch",
-        description: "New password and confirmation password do not match.",
-        type: "error",
-      });
+      showToast("error", "New password and confirmation password do not match.");
       return;
     }
 
     if (newPassword.length < 8) {
-      toast({
-        title: "Weak Password",
-        description: "New password must be at least 8 characters long.",
-        type: "error",
-      });
+      showToast("error", "New password must be at least 8 characters long.");
       return;
     }
 
@@ -45,11 +37,7 @@ export default function ClinicSettingsPage() {
     try {
       const res = await settingsApi.updatePassword(currentPassword, newPassword, confirmPassword);
       if (res && res.success) {
-        toast({
-          title: "Password Updated",
-          description: "Your account credentials have been changed successfully.",
-          type: "success",
-        });
+        showToast("success", "Your account credentials have been changed successfully.");
         setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
@@ -57,11 +45,7 @@ export default function ClinicSettingsPage() {
         throw new Error(res?.message || "Failed to update password.");
       }
     } catch (err: any) {
-      toast({
-        title: "Password Update Failed",
-        description: err?.message || "Invalid current password or update error.",
-        type: "error",
-      });
+      showToast("error", err?.message || "Invalid current password or update error.");
     } finally {
       setPasswordLoading(false);
     }

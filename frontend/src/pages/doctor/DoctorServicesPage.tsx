@@ -79,7 +79,7 @@ export default function DoctorServicesPage() {
               Manage your outpatient clinical consultation scope, verified specialty services, and practice location.
             </p>
           </div>
-          <Badge tone={isApproved ? "success" : "urgent"}>
+          <Badge tone={isApproved ? "available" : "limited"}>
             {isApproved ? "Verified Practice" : independent?.verificationStatus || "Pending Verification"}
           </Badge>
         </div>

@@ -485,7 +485,7 @@ export function DoctorProfilePage() {
               <h2 className="font-bold text-navy text-lg">{profile.name}</h2>
               <p className="text-xs text-slate-500 font-medium mt-0.5">{docProf.specialty || "Emergency Physician"} · {docProf.qualification || "MBBS"}</p>
             </div>
-            <Badge tone={docProf.verificationStatus === "APPROVED" || profile.isVerified ? "success" : "urgent"}>
+            <Badge tone={docProf.verificationStatus === "APPROVED" || profile.isVerified ? "available" : "limited"}>
               {docProf.verificationStatus === "APPROVED" || profile.isVerified ? "Verified Practitioner" : "Pending Verification"}
             </Badge>
           </div>

@@ -8,7 +8,7 @@ import { Building2, Save, Lock, AlertCircle } from "lucide-react";
 import { clinicApi } from "../../services/api";
 
 export default function ClinicProfilePage() {
-  const { toast } = useToast();
+  const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,20 +89,12 @@ export default function ClinicProfilePage() {
 
       const res = await clinicApi.updateProfile(payload);
       if (res && res.success) {
-        toast({
-          title: "Profile Updated",
-          description: "Clinic profile details have been successfully saved.",
-          type: "success",
-        });
+        showToast("success", "Clinic profile details have been successfully saved.");
       } else {
         throw new Error(res?.message || "Failed to update profile.");
       }
     } catch (err: any) {
-      toast({
-        title: "Update Failed",
-        description: err?.message || "Could not save clinic profile. Please verify all fields.",
-        type: "error",
-      });
+      showToast("error", err?.message || "Could not save clinic profile. Please verify all fields.");
     } finally {
       setSaving(false);
     }

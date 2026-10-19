@@ -270,7 +270,7 @@ export const AdminHospitalAppealsPage: React.FC = () => {
       {/* Review Modal */}
       {selectedAppeal && (
         <Modal
-          isOpen={Boolean(selectedAppeal)}
+          open={Boolean(selectedAppeal)}
           onClose={() => setSelectedAppeal(null)}
           title={`Review Security Appeal — ${selectedAppeal.hospitalName}`}
         >
