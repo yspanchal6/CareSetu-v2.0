@@ -1481,7 +1481,7 @@ exports.consumeApprovalEvent = async (req, res, next) => {
 exports.getDirectory = async (req, res, next) => {
   try {
     const { HospitalDirectoryService } = require('../services/hospital-directory.service');
-    const { page, limit, search, state, district, type, source, sort } = req.query;
+    const { page, limit, search, state, district, type, category, source, sort } = req.query;
 
     const result = await HospitalDirectoryService.getDirectory({
       page,
@@ -1490,6 +1490,7 @@ exports.getDirectory = async (req, res, next) => {
       state,
       district,
       type,
+      category,
       source,
       sort
     });

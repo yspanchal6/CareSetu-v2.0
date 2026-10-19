@@ -1126,6 +1126,7 @@ export const hospitalDirectoryApi = {
     state?: string;
     district?: string;
     type?: string;
+    category?: "HOSPITALS" | "STATISTICS" | "CLINICS" | "DOCTORS" | string;
     source?: string;
     sort?: string;
   }) => {
@@ -1136,6 +1137,7 @@ export const hospitalDirectoryApi = {
     if (params?.state) query.append("state", params.state);
     if (params?.district) query.append("district", params.district);
     if (params?.type) query.append("type", params.type);
+    if (params?.category) query.append("category", params.category);
     if (params?.source) query.append("source", params.source);
     if (params?.sort) query.append("sort", params.sort);
     return request<DirectoryResponse>(`/hospitals/directory?${query.toString()}`);

@@ -29,8 +29,9 @@ class HospitalDirectoryService {
     const normalizedCategory = (category || 'HOSPITALS').toUpperCase();
     const isCareSetuType = !type || type === 'ALL' || type.toLowerCase().includes('caresetu');
     const fetchHospitals = (normalizedCategory === 'HOSPITALS' || normalizedCategory === 'ALL');
+    const fetchStatistics = (normalizedCategory === 'STATISTICS' || normalizedCategory === 'ALL');
     const fetchCareSetu = fetchHospitals && (source === 'ALL' || source === 'CARESETU_REGISTERED') && isCareSetuType;
-    const fetchGov = fetchHospitals && (source === 'ALL' || source === 'GOVERNMENT_DATA');
+    const fetchGov = (fetchHospitals || fetchStatistics) && (source === 'ALL' || source === 'GOVERNMENT_DATA');
     const fetchClinics = normalizedCategory === 'CLINICS' || normalizedCategory === 'ALL';
     const fetchDoctors = normalizedCategory === 'DOCTORS' || normalizedCategory === 'ALL';
 
@@ -94,6 +95,12 @@ class HospitalDirectoryService {
     // 2. Build Government Health Record Query
     if (fetchGov) {
       const whereGov = {};
+
+      if (normalizedCategory === 'HOSPITALS') {
+        whereGov.source = { not: 'PM_JAY' };
+      } else if (normalizedCategory === 'STATISTICS') {
+        whereGov.source = 'PM_JAY';
+      }
 
       if (state && state !== 'ALL') {
         whereGov.state = { equals: state, mode: 'insensitive' };
@@ -354,6 +361,9 @@ class HospitalDirectoryService {
     } else if (normalizedCategory === 'DOCTORS') {
       combined = normalizedDoctors;
       totalCount = doctorTotal;
+    } else if (normalizedCategory === 'STATISTICS') {
+      combined = normalizedGov;
+      totalCount = govTotal;
     } else if (source === 'CARESETU_REGISTERED') {
       combined = normalizedRegistered;
       totalCount = registeredTotal;

@@ -31,6 +31,7 @@ export default function PatientHospitalsPage() {
   const [selectedState, setSelectedState] = useState("ALL");
   const [selectedDistrict, setSelectedDistrict] = useState("ALL");
   const [selectedType, setSelectedType] = useState("ALL");
+  const [selectedCategory, setSelectedCategory] = useState<"HOSPITALS" | "STATISTICS" | "CLINICS" | "DOCTORS">("HOSPITALS");
   const [sort, setSort] = useState("name_asc");
   const [page, setPage] = useState(1);
 
@@ -90,9 +91,10 @@ export default function PatientHospitalsPage() {
         state: selectedState !== "ALL" ? selectedState : undefined,
         district: selectedDistrict !== "ALL" ? selectedDistrict : undefined,
         type: selectedType !== "ALL" ? selectedType : undefined,
+        category: selectedCategory,
         source: source !== "ALL" ? source : undefined,
         sort,
-      });
+      } as any);
 
       if (res.success) {
         setHospitals(res.data);
@@ -104,7 +106,7 @@ export default function PatientHospitalsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, selectedState, selectedDistrict, selectedType, source, sort]);
+  }, [page, search, selectedState, selectedDistrict, selectedType, selectedCategory, source, sort]);
 
   useEffect(() => {
     loadFilters(selectedState);
@@ -165,6 +167,28 @@ export default function PatientHospitalsPage() {
 
       {/* Filter & Search Control Panel */}
       <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-xs space-y-3">
+        {/* Provider Category Selection Tabs */}
+        <div className="flex items-center gap-2 border-b border-slate-100 pb-3 overflow-x-auto">
+          {(["HOSPITALS", "STATISTICS", "CLINICS", "DOCTORS"] as const).map((cat) => (
+            <button
+              key={cat}
+              onClick={() => {
+                setSelectedCategory(cat);
+                setPage(1);
+              }}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${selectedCategory === cat
+                  ? "bg-navy text-white shadow-xs"
+                  : "bg-slate-100 text-slate-600 hover:text-navy hover:bg-slate-200"
+                }`}
+            >
+              {cat === "HOSPITALS" && "🏥 Hospitals (Physical Facilities)"}
+              {cat === "STATISTICS" && "📊 Government Health Stats (AB PM-JAY)"}
+              {cat === "CLINICS" && "🩺 Clinics"}
+              {cat === "DOCTORS" && "👨‍⚕️ Doctors"}
+            </button>
+          ))}
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
           {/* Search Bar */}
           <div className="sm:col-span-4">
@@ -238,7 +262,11 @@ export default function PatientHospitalsPage() {
       </div>
 
       {/* Map View Mode */}
-      {showMap && (
+      {showMap && selectedCategory === "STATISTICS" ? (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-900 flex items-center gap-2">
+          <span>Map markers are disabled for Government Health Statistics because records represent state-wide cumulative admissions, not individual facility GPS coordinates.</span>
+        </div>
+      ) : showMap && (
         <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-md">
           <div className="p-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between text-xs text-navy font-semibold">
             <span>Map Markers ({validMapMarkers.length} hospitals with coordinates)</span>
