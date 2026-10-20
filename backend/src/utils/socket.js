@@ -14,11 +14,13 @@ const initSocket = (server) => {
           'http://localhost:4173',
           'http://127.0.0.1:5173',
           'http://127.0.0.1:5174',
+          'https://caresetu.pages.dev',
           process.env.FRONTEND_URL,
         ].filter(Boolean);
 
         if (
           allowedOrigins.includes(origin) ||
+          origin.endsWith('.pages.dev') ||
           process.env.NODE_ENV !== 'production' ||
           origin.endsWith('.trycloudflare.com') ||
           origin.endsWith('.ngrok-free.app') ||

@@ -40,6 +40,8 @@ app.use(helmetConfig);
 // CORS Policy
 const allowedOrigins = [
   'http://localhost:5173',
+  'http://localhost:4173',
+  'https://caresetu.pages.dev',
   process.env.FRONTEND_URL,
   ...(process.env.CORS_ORIGINS || '').split(',').map((origin) => origin.trim()),
 ].filter(Boolean);
@@ -48,7 +50,8 @@ app.use(cors({
   origin: (origin, callback) => {
     // In non-production environments only, permit temporary trycloudflare tunnels
     const allowTunnel = process.env.NODE_ENV !== 'production' && /\.trycloudflare\.com$/.test(origin || '');
-    if (!origin || allowedOrigins.includes(origin) || allowTunnel) {
+    const allowPagesDev = /\.pages\.dev$/.test(origin || '');
+    if (!origin || allowedOrigins.includes(origin) || allowPagesDev || allowTunnel) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
