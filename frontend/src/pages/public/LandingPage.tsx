@@ -117,7 +117,7 @@ const teamMembers = [
     name: "Panchal Yash",
     role: "Team Lead",
     badge: "Team Lead",
-    photo: "/team-verify/yash_clean.png",
+    photo: `${import.meta.env.BASE_URL}team-verify/yash_clean.png`,
     imageFit: "object-cover",
     imagePosition: "object-center",
     responsibilities:
@@ -128,7 +128,7 @@ const teamMembers = [
     name: "Princy Prajapati",
     role: "AI/ML Developer",
     badge: "AI & ML",
-    photo: "/team-verify/princy_prajapati_clean.png",
+    photo: `${import.meta.env.BASE_URL}team-verify/princy_prajapati_clean.png`,
     imageFit: "object-cover",
     imagePosition: "object-center",
     responsibilities:
@@ -139,7 +139,7 @@ const teamMembers = [
     name: "Kritika Singh",
     role: "UI/UX & Frontend Developer",
     badge: "UI/UX & Frontend",
-    photo: "/team-verify/kritika_singh_clean.png",
+    photo: `${import.meta.env.BASE_URL}team-verify/kritika_singh_clean.png`,
     imageFit: "object-cover",
     imagePosition: "object-center",
     responsibilities:
@@ -150,7 +150,7 @@ const teamMembers = [
     name: "Nensi Parmar",
     role: "Database & Data Integration",
     badge: "Data & Database",
-    photo: "/team-verify/nensi_parmar.jpeg",
+    photo: `${import.meta.env.BASE_URL}team-verify/nensi_parmar.jpeg`,
     imageFit: "object-cover",
     imagePosition: "object-center",
     responsibilities:
@@ -161,7 +161,7 @@ const teamMembers = [
     name: "Himanshu",
     role: "Research & Documentation",
     badge: "Domain Research",
-    photo: "/team-verify/himanshu.png",
+    photo: `${import.meta.env.BASE_URL}team-verify/himanshu.png`,
     imageFit: "object-cover",
     imagePosition: "object-[center_15%]",
     responsibilities:
@@ -172,7 +172,7 @@ const teamMembers = [
     name: "Siddiqui Affan",
     role: "Presentation & Research",
     badge: "Strategy & Pitching",
-    photo: "/team-verify/siddiqui-affan-professional.png",
+    photo: `${import.meta.env.BASE_URL}team-verify/siddiqui-affan-professional.png`,
     imageFit: "object-cover",
     imagePosition: "object-center",
     responsibilities:
@@ -672,8 +672,24 @@ export default function LandingPage() {
                   src={member.photo}
                   alt={`${member.name} - ${member.role}`}
                   loading="lazy"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    target.style.display = "none";
+                    const fallback = target.nextElementSibling as HTMLElement | null;
+                    if (fallback) fallback.style.display = "flex";
+                  }}
                   className={`w-full h-full ${member.imageFit || "object-cover"} transition-transform duration-500 group-hover:scale-105 motion-reduce:transform-none ${member.imagePosition}`}
                 />
+                <div
+                  style={{ display: "none" }}
+                  className="w-full h-full flex-col items-center justify-center bg-gradient-to-br from-sky-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 text-slate-400 dark:text-slate-500"
+                  aria-hidden="true"
+                >
+                  <User className="w-16 h-16 stroke-[1.5] text-sky-400 dark:text-sky-500 mb-2" />
+                  <span className="text-sm font-semibold tracking-wide text-slate-700 dark:text-slate-300">
+                    {member.name}
+                  </span>
+                </div>
               </div>
 
               {/* Card Body */}

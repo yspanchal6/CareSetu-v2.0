@@ -106,6 +106,13 @@ class GoogleAuthService {
           err.status = 401;
           throw err;
         }
+
+        // If no alternative Google Client is configured, fail immediately with 401
+        if (!this.client) {
+          const err = new Error(fbErr.message || 'Failed to verify Google ID token.');
+          err.status = 401;
+          throw err;
+        }
       }
     }
 
