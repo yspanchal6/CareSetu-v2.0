@@ -98,9 +98,9 @@ export const OtpInput = ({
       return `${base} border-rose-500 bg-rose-50/30 text-rose-700 animate-shake`;
     }
     if (status === 'verifying') {
-      return `${base} border-sky ring-2 ring-sky/20 bg-sky-50/20 text-navy animate-pulse cursor-wait`;
+      return `${base} border-sky ring-2 ring-sky/20 bg-sky-50/20 dark:bg-sky-950/40 text-navy dark:text-white animate-pulse cursor-wait`;
     }
-    return `${base} border-slate-200 focus:border-sky bg-white text-navy shadow-sm disabled:bg-slate-50 disabled:text-slate-400`;
+    return `${base} border-slate-200 dark:border-slate-700 focus:border-sky dark:focus:border-sky bg-white dark:bg-slate-900 text-navy dark:text-white shadow-sm disabled:bg-slate-50 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500`;
   };
 
   return (

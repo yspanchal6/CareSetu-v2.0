@@ -29,6 +29,12 @@ body {
   color-scheme: light;
 }
 
+html.dark body {
+  background: #0B132B;
+  color: #F1F5F9;
+  color-scheme: dark;
+}
+
 * {
   box-sizing: border-box;
 }

@@ -11,6 +11,7 @@ interface Toast {
 
 interface ToastContextValue {
   showToast: (type: ToastType, message: string) => void;
+  toast: (options: { title?: string; description?: string; type?: ToastType; message?: string } | string) => void;
 }
 
 const ToastContext = createContext<ToastContextValue | undefined>(undefined);
@@ -38,8 +39,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000);
   }, []);
 
+  const toast = useCallback((options: { title?: string; description?: string; type?: ToastType; message?: string } | string) => {
+    if (typeof options === "string") {
+      showToast("info", options);
+    } else {
+      const type = options.type || "info";
+      const message = options.description || options.message || options.title || "";
+      showToast(type, message);
+    }
+  }, [showToast]);
+
   return (
-    <ToastContext.Provider value={{ showToast }}>
+    <ToastContext.Provider value={{ showToast, toast }}>
       {children}
       {createPortal(
         <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2 w-full max-w-sm px-4 sm:px-0">
@@ -48,11 +59,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             return (
               <div
                 key={t.id}
-                className={`bg-white shadow-xl rounded-xl border-l-4 ${colorMap[t.type]} px-4 py-3 flex items-start gap-2.5 animate-in slide-in-from-top-2 fade-in duration-200`}
+                className={`bg-white dark:bg-slate-900 shadow-xl rounded-xl border border-slate-100 dark:border-slate-800 border-l-4 ${colorMap[t.type]} px-4 py-3 flex items-start gap-2.5 animate-in slide-in-from-top-2 fade-in duration-200 transition-colors`}
               >
                 <Icon className={`w-5 h-5 shrink-0 mt-0.5 ${colorMap[t.type].split(" ")[1]}`} />
-                <p className="text-sm text-text flex-1">{t.message}</p>
-                <button onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))} className="text-slate-400 hover:text-slate-600">
+                <p className="text-sm text-text dark:text-slate-100 flex-1">{t.message}</p>
+                <button onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
                   <X className="w-4 h-4" />
                 </button>
               </div>

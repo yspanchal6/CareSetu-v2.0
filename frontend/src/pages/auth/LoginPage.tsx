@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Input } from "../../components/common/Input";
 import { PasswordInput } from "../../components/common/PasswordInput";
 import Button from "../../components/common/Button";
@@ -12,6 +12,8 @@ import { useTranslation } from "../../i18n/I18nContext";
 
 export default function LoginPage() {
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
+  const urlRole = searchParams.get("role")?.toUpperCase();
   const [loginMethod, setLoginMethod] = useState<"password" | "otp">("password");
   const [step, setStep] = useState<"form" | "otp_verify">("form");
   const [email, setEmail] = useState("patient@test.com");
@@ -58,7 +60,8 @@ export default function LoginPage() {
     try {
       const user = await login(email, password);
       showToast("success", `Welcome back, ${user.name}.`);
-      navigate(`/${user.role}/dashboard`);
+      const targetRoute = user.portalRoute || `/${user.role}/dashboard`;
+      navigate(targetRoute);
     } catch (error) {
       setIsShake(true);
       setTimeout(() => setIsShake(false), 600);
@@ -113,11 +116,12 @@ export default function LoginPage() {
       if (res.success && res.user && res.token) {
         const user = res.user;
         const token = res.token;
+        const targetRoute = (res as any).portalRoute || user.portalRoute || `/${user.role.toLowerCase()}/dashboard`;
         setOtpStatus("success");
         showToast("success", `Welcome back, ${user.name || 'User'}.`);
         setTimeout(async () => {
           await setSession(user, token);
-          navigate(`/${user.role.toLowerCase()}/dashboard`);
+          navigate(targetRoute);
         }, 1000);
       } else {
         setOtpStatus("error");
@@ -237,18 +241,18 @@ export default function LoginPage() {
 
   return (
     <div>
-      <h2 className="text-2xl font-extrabold text-navy">Welcome back</h2>
-      <p className="text-sm text-text-secondary mt-1.5 mb-6">CareSetu connects you with the healthcare network.</p>
+      <h2 className="text-2xl font-extrabold text-navy dark:text-white transition-colors">Welcome back</h2>
+      <p className="text-sm text-text-secondary dark:text-slate-400 mt-1.5 mb-6 transition-colors">CareSetu connects you with the healthcare network.</p>
 
-      <div className="flex bg-slate-100 p-1 rounded-xl mb-6">
+      <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-6 transition-colors">
         <button
-          className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${loginMethod === "password" ? "bg-white text-navy shadow-sm" : "text-slate-500 hover:text-navy"}`}
+          className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${loginMethod === "password" ? "bg-white dark:bg-slate-900 text-navy dark:text-white shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-navy dark:hover:text-white"}`}
           onClick={() => setLoginMethod("password")}
         >
           Password
         </button>
         <button
-          className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${loginMethod === "otp" ? "bg-white text-navy shadow-sm" : "text-slate-500 hover:text-navy"}`}
+          className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${loginMethod === "otp" ? "bg-white dark:bg-slate-900 text-navy dark:text-white shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-navy dark:hover:text-white"}`}
           onClick={() => setLoginMethod("otp")}
         >
           OTP
@@ -289,7 +293,7 @@ export default function LoginPage() {
 
       {/* OR Divider and Google Auth Button placed BELOW primary login button */}
       <GoogleDivider />
-      <GoogleAuthButton />
+      <GoogleAuthButton role={urlRole} />
 
       <p className="text-center text-sm text-text-secondary mt-6">
         Don't have an account?{" "}

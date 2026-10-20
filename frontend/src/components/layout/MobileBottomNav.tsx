@@ -35,15 +35,15 @@ export default function MobileBottomNav() {
 
   return (
     <>
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-100 grid grid-cols-5 px-1 pb-[env(safe-area-inset-bottom)]">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 grid grid-cols-5 px-1 pb-[env(safe-area-inset-bottom)] transition-colors duration-200">
         {items.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             onClick={(e) => handleNavClick(e, item)}
             className={({ isActive }) =>
-              `flex flex-col items-center justify-center gap-1 py-2.5 text-[11px] font-medium ${
-                isActive ? "text-sky" : "text-text-secondary"
+              `flex flex-col items-center justify-center gap-1 py-2.5 text-[11px] font-medium transition-colors ${
+                isActive ? "text-sky" : "text-text-secondary dark:text-slate-400"
               } ${item.to === "/patient/emergency" ? "relative" : ""}`
             }
           >
