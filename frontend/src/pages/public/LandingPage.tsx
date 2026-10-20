@@ -90,7 +90,7 @@ const signupRoles = [
     title: "Sign up as Patient",
     desc: "Get matched with the right hospital and access Doctor AI during emergencies.",
     gradient: "from-sky-500 to-blue-600",
-    bgAccent: "bg-sky-50 dark:bg-sky-950/30 text-sky-600 dark:text-sky-400",
+    bgAccent: "bg-sky-50 text-sky-600",
   },
   {
     role: "doctor",
@@ -98,8 +98,7 @@ const signupRoles = [
     title: "Sign up as Doctor",
     desc: "Review assigned patients, AI case summaries, and coordinate treatment.",
     gradient: "from-indigo-500 to-purple-600",
-    bgAccent:
-      "bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400",
+    bgAccent: "bg-indigo-50 text-indigo-600",
   },
   {
     role: "admin",
@@ -107,8 +106,7 @@ const signupRoles = [
     title: "Sign up as Admin",
     desc: "Oversee the CareSetu network, hospitals, and system health.",
     gradient: "from-emerald-500 to-teal-600",
-    bgAccent:
-      "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400",
+    bgAccent: "bg-emerald-50 text-emerald-600",
   },
 ];
 
@@ -453,21 +451,21 @@ export default function LandingPage() {
           {stats.map((s) => (
             <Card
               key={s.label}
-              className="p-5 text-center group hover:-translate-y-1 hover:shadow-xl hover:border-sky-300 dark:hover:border-sky-700 transition-all duration-300 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md"
+              className="p-5 text-center group hover:-translate-y-1 hover:shadow-xl hover:border-sky-300 transition-all duration-300 bg-white/90 backdrop-blur-md"
             >
-              <div className="w-10 h-10 rounded-xl bg-sky-50 dark:bg-sky-950/50 text-sky-600 dark:text-sky-400 flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
+              <div className="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
                 <s.icon className="w-5 h-5" />
               </div>
 
-              <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+              <p className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
                 {s.value}
               </p>
 
-              <p className="text-xs font-bold text-slate-600 dark:text-slate-300 mt-1">
+              <p className="text-xs font-bold text-slate-600 mt-1">
                 {s.label}
               </p>
 
-              <span className="inline-block text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full mt-2">
+              <span className="inline-block text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full mt-2">
                 {s.change}
               </span>
             </Card>
@@ -478,15 +476,15 @@ export default function LandingPage() {
       {/* ROLE SELECTION SECTION */}
       <section className="max-w-7xl mx-auto px-5 sm:px-8 py-16 sm:py-20">
         <div className="text-center max-w-2xl mx-auto mb-12 space-y-3">
-          <span className="text-xs font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400 bg-sky-100 dark:bg-sky-950 px-3 py-1 rounded-full">
+          <span className="text-xs font-bold uppercase tracking-wider text-sky-600 bg-sky-100 px-3 py-1 rounded-full">
             Tailored Onboarding
           </span>
 
-          <h2 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight">
+          <h2 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
             Get started on CareSetu
           </h2>
 
-          <p className="text-slate-600 dark:text-slate-300 text-base leading-relaxed">
+          <p className="text-slate-600 text-base leading-relaxed">
             Create an account tailored to your role in the emergency care
             network.
           </p>
@@ -496,7 +494,7 @@ export default function LandingPage() {
           {signupRoles.map((r) => (
             <Card
               key={r.role}
-              className="flex flex-col p-6 hover:-translate-y-1.5 hover:shadow-2xl hover:border-sky-300 dark:hover:border-sky-700 transition-all duration-300 group bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800"
+              className="flex flex-col p-6 hover:-translate-y-1.5 hover:shadow-2xl hover:border-sky-300 transition-all duration-300 group bg-white border border-slate-200/80"
             >
               <div
                 className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-5 ${r.bgAccent} group-hover:scale-110 transition-transform`}
@@ -504,11 +502,11 @@ export default function LandingPage() {
                 <r.icon className="w-6 h-6" />
               </div>
 
-              <h3 className="text-xl font-bold text-slate-900 dark:text-white group-hover:text-sky-600 dark:group-hover:text-sky-400 transition-colors">
+              <h3 className="text-xl font-bold text-slate-900 group-hover:text-sky-600 transition-colors">
                 {r.title}
               </h3>
 
-              <p className="text-sm text-slate-600 dark:text-slate-400 mt-2.5 leading-relaxed flex-1">
+              <p className="text-sm text-slate-600 mt-2.5 leading-relaxed flex-1">
                 {r.desc}
               </p>
 
@@ -530,17 +528,17 @@ export default function LandingPage() {
       </section>
 
       {/* HOW IT WORKS / FEATURES SECTION */}
-      <section className="max-w-7xl mx-auto px-5 sm:px-8 py-16 bg-slate-100/60 dark:bg-slate-900/40 rounded-3xl my-8 border border-slate-200/60 dark:border-slate-800/60">
+      <section className="max-w-7xl mx-auto px-5 sm:px-8 py-16 bg-slate-100/60 rounded-3xl my-8 border border-slate-200/60">
         <div className="max-w-2xl mb-12 space-y-3">
-          <span className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 bg-rose-100 dark:bg-rose-950/60 px-3 py-1 rounded-full">
+          <span className="text-xs font-bold uppercase tracking-wider text-rose-600 bg-rose-100 px-3 py-1 rounded-full">
             Core Capabilities
           </span>
 
-          <h2 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight">
+          <h2 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
             How CareSetu Works
           </h2>
 
-          <p className="text-slate-600 dark:text-slate-300 text-base leading-relaxed">
+          <p className="text-slate-600 text-base leading-relaxed">
             Three connected capabilities move a patient from crisis to
             treatment with as little friction as possible.
           </p>
@@ -550,27 +548,27 @@ export default function LandingPage() {
           {features.map((f, i) => (
             <Card
               key={f.title}
-              className="p-7 relative overflow-hidden hover:-translate-y-1 hover:shadow-xl transition-all duration-300 group bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800"
+              className="p-7 relative overflow-hidden hover:-translate-y-1 hover:shadow-xl transition-all duration-300 group bg-white border border-slate-200/80"
             >
               <div
                 className={`absolute -top-12 -right-12 w-32 h-32 rounded-full bg-gradient-to-br ${f.glowColor} blur-2xl group-hover:scale-150 transition-transform duration-500`}
               />
 
               <div className="flex items-center justify-between mb-5 relative z-10">
-                <div className="w-12 h-12 rounded-2xl bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center group-hover:scale-110 transition-transform">
                   <f.icon className="w-6 h-6" />
                 </div>
 
-                <span className="text-[11px] font-extrabold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
+                <span className="text-[11px] font-extrabold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
                   Step 0{i + 1}
                 </span>
               </div>
 
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white relative z-10">
+              <h3 className="text-lg font-bold text-slate-900 relative z-10">
                 {f.title}
               </h3>
 
-              <p className="text-sm text-slate-600 dark:text-slate-400 mt-2.5 leading-relaxed relative z-10">
+              <p className="text-sm text-slate-600 mt-2.5 leading-relaxed relative z-10">
                 {f.desc}
               </p>
             </Card>
@@ -637,23 +635,23 @@ export default function LandingPage() {
       {/* PEOPLE BEHIND CARESETU / OUR TEAM SECTION */}
       <section
         id="team"
-        className="max-w-7xl mx-auto px-5 sm:px-8 py-20 lg:py-24 border-t border-slate-200/80 dark:border-slate-800/80"
+        className="max-w-7xl mx-auto px-5 sm:px-8 py-20 lg:py-24 border-t border-slate-200/80"
         aria-labelledby="our-team-heading"
       >
         <div className="text-center max-w-3xl mx-auto mb-14 sm:mb-16">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-sky-50 dark:bg-sky-950/60 border border-sky-200/80 dark:border-sky-800/70 text-sky-700 dark:text-sky-300 text-xs font-semibold uppercase tracking-wider mb-4 shadow-xs">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-sky-50 border border-sky-200/80 text-sky-700 text-xs font-semibold uppercase tracking-wider mb-4 shadow-xs">
             <Users className="w-3.5 h-3.5" />
             <span>People Behind CareSetu</span>
           </div>
 
           <h2
             id="our-team-heading"
-            className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 dark:text-white tracking-tight"
+            className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight"
           >
             Meet the Builders of CareSetu
           </h2>
 
-          <p className="mt-4 text-slate-600 dark:text-slate-300 text-base sm:text-lg leading-relaxed">
+          <p className="mt-4 text-slate-600 text-base sm:text-lg leading-relaxed">
             A multidisciplinary engineering team combining distributed systems, clinical AI triage,
             accessible UI/UX, and healthcare domain research to connect patients and hospitals when every second counts.
           </p>
@@ -664,10 +662,10 @@ export default function LandingPage() {
           {teamMembers.map((member) => (
             <div
               key={member.name}
-              className="group relative flex flex-col h-full bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-sm hover:shadow-xl hover:border-sky-300 dark:hover:border-sky-600/60 transition-all duration-300 overflow-hidden"
+              className="group relative flex flex-col h-full bg-white rounded-3xl border border-slate-200/90 shadow-sm hover:shadow-xl hover:border-sky-300 transition-all duration-300 overflow-hidden"
             >
               {/* Identical Portrait Container across all 6 cards */}
-              <div className="relative w-full aspect-[4/5] overflow-hidden bg-slate-100 dark:bg-slate-800/80 border-b border-slate-100 dark:border-slate-800 flex items-center justify-center">
+              <div className="relative w-full aspect-[4/5] overflow-hidden bg-slate-100 border-b border-slate-100 flex items-center justify-center">
                 <img
                   src={member.photo}
                   alt={`${member.name} - ${member.role}`}
@@ -682,11 +680,11 @@ export default function LandingPage() {
                 />
                 <div
                   style={{ display: "none" }}
-                  className="w-full h-full flex-col items-center justify-center bg-gradient-to-br from-sky-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 text-slate-400 dark:text-slate-500"
+                  className="w-full h-full flex-col items-center justify-center bg-gradient-to-br from-sky-50 to-slate-100 text-slate-400"
                   aria-hidden="true"
                 >
-                  <User className="w-16 h-16 stroke-[1.5] text-sky-400 dark:text-sky-500 mb-2" />
-                  <span className="text-sm font-semibold tracking-wide text-slate-700 dark:text-slate-300">
+                  <User className="w-16 h-16 stroke-[1.5] text-sky-400 mb-2" />
+                  <span className="text-sm font-semibold tracking-wide text-slate-700">
                     {member.name}
                   </span>
                 </div>
@@ -696,35 +694,35 @@ export default function LandingPage() {
               <div className="p-6 flex flex-col flex-1">
                 {/* 2. Member Name directly below photograph */}
                 <div>
-                  <h3 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight group-hover:text-sky-600 dark:group-hover:text-sky-400 transition-colors">
+                  <h3 className="text-xl font-bold text-slate-900 tracking-tight group-hover:text-sky-600 transition-colors">
                     {member.name}
                   </h3>
                 </div>
 
                 {/* 3. Role Badge below the name */}
                 <div className="mt-2.5 mb-3 flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border border-sky-200/80 dark:border-sky-800/60">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200/80">
                     <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse motion-reduce:animate-none" />
                     {member.badge}
                   </span>
                   {member.role !== member.badge && (
-                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    <span className="text-xs font-semibold text-slate-500">
                       • {member.role}
                     </span>
                   )}
                 </div>
 
                 {/* 4. Responsibilities and Skills below the role */}
-                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed flex-1">
+                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed flex-1">
                   {member.responsibilities}
                 </p>
 
                 {/* Tags / Focus Skills */}
-                <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap gap-1.5">
+                <div className="pt-4 mt-4 border-t border-slate-100 flex flex-wrap gap-1.5">
                   {member.tags.map((tag) => (
                     <span
                       key={tag}
-                      className="px-2.5 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                      className="px-2.5 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-600"
                     >
                       {tag}
                     </span>
@@ -739,11 +737,11 @@ export default function LandingPage() {
       {/* FINAL CALL TO ACTION */}
       <section className="max-w-4xl mx-auto px-5 sm:px-8 py-20 text-center relative">
         <div className="space-y-4">
-          <h2 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight">
+          <h2 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
             Every second is coordinated.
           </h2>
 
-          <p className="text-slate-600 dark:text-slate-300 text-base max-w-lg mx-auto leading-relaxed">
+          <p className="text-slate-600 text-base max-w-lg mx-auto leading-relaxed">
             Join the network connecting patients, hospitals, and emergency
             doctors when every second counts.
           </p>

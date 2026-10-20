@@ -919,6 +919,7 @@ exports.forgotPassword = async (req, res, next) => {
         const phoneRes = await otpService.requestOtp({
           identifier: normalizedPhone,
           phone: normalizedPhone,
+          email: user.email || undefined,
           purpose: 'PASSWORD_RESET_PHONE',
         });
         if (phoneRes.devOtp) devPhoneOtp = phoneRes.devOtp;

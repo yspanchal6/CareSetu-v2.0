@@ -4,6 +4,8 @@ const prisma = require('../config/prisma');
 const textbee = require('./providers/textbee.provider');
 const brevo = require('./providers/brevo.provider');
 
+const otpDispatcher = require('./otp-dispatcher.service');
+
 class OtpService {
   constructor() {
     this.OTP_LENGTH = 6;
@@ -67,93 +69,63 @@ class OtpService {
       orderBy: { createdAt: 'desc' },
     });
     const expiresAt = otpRecord.expiresAt;
-    const message = `CareSetu OTP: ${otp}\nValid for 5 minutes.\nDo not share.`;
-    const sends = [];
 
-    if (phone) {
-      sends.push(
-        textbee.sendSMS(phone, message)
-          .then((result) => ({
-            channel: 'sms',
-            status: result.success ? 'sent' : 'failed',
-            httpStatus: result.status,
-            phone,
-            deliveryState: result.deliveryState || (result.success ? 'ACCEPTED_BY_PROVIDER' : 'REJECTED_BY_PROVIDER'),
-            ...(result.messageId ? { messageId: result.messageId } : {}),
-            ...(result.mock ? { mock: true } : {}),
-            ...(result.error ? { error: result.error } : {}),
-          }))
-          .catch((error) => ({ channel: 'sms', status: 'failed', httpStatus: 500, error: error.message }))
-      );
-    }
-
-    if (email) {
-      sends.push(
-        brevo.sendEmail({
-          to: email,
-          subject: 'CareSetu — Email Verification OTP',
-          html: `<p>Your CareSetu OTP is: <strong>${otp}</strong></p><p>This OTP is valid for 5 minutes. Do not share this code with anyone.</p><p>If you did not request this OTP, please ignore this message.</p>`,
-          text: message,
-        })
-          .then((result) => ({
-            channel: 'email',
-            status: result.success ? 'sent' : 'failed',
-            httpStatus: result.status,
-            email,
-            deliveryState: result.deliveryState || (result.success ? 'ACCEPTED_BY_PROVIDER' : 'REJECTED_BY_PROVIDER'),
-            ...(result.messageId ? { messageId: result.messageId } : {}),
-            ...(result.mock ? { mock: true } : {}),
-            ...(result.error ? { error: result.error } : {}),
-          }))
-          .catch((error) => ({ channel: 'email', status: 'failed', httpStatus: 500, error: error.message }))
-      );
-    }
-
-    const channels = await Promise.all(sends);
+    // Dispatches via priority sequence: MSG91 -> 2Factor -> Brevo
+    const dispatchResult = await otpDispatcher.dispatchOtp({
+      phone,
+      email,
+      otp,
+      purpose,
+    });
 
     // Only log OTP in test environment — NEVER in normal dev/prod logs
     if (process.env.NODE_ENV === 'test') {
       console.log('[OTP_TEST] Expires:', expiresAt.toISOString());
     }
 
-    let anySent = channels.some((ch) => ch.status === 'sent');
+    let delivered = dispatchResult.delivered;
 
-    if (!anySent && (process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEV_OTP === 'true')) {
+    if (!delivered && (process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEV_OTP === 'true')) {
       // Allow synthetic fallback in development/test mode if external SMS/Email providers fail or are unconfigured
-      anySent = true;
-      channels.forEach((ch) => {
-        ch.status = 'sent';
-        ch.mock = true;
-      });
+      delivered = true;
+      dispatchResult.finalDeliveryInfo = {
+        channel: phone ? 'sms' : 'email',
+        provider: 'dev-fallback',
+        deliveryState: 'DEV_MOCK_SENT',
+        mock: true,
+      };
     }
 
-    if (!anySent && channels.length > 0) {
+    if (!delivered) {
       // SECURITY CRITICAL: Delete un-delivered OTP record so it CANNOT be verified
       await prisma.otp.deleteMany({ where: { identifier, purpose } });
 
-      const smsChannel = channels.find((c) => c.channel === 'sms');
-      const emailChannel = channels.find((c) => c.channel === 'email');
-      const safeErrorMsg = smsChannel?.error || emailChannel?.error || 'Verification code delivery is temporarily unavailable. Please try again later.';
+      console.error('[OTP_SERVICE] Multi-Provider Delivery Failed — OTP Record Cleared:', {
+        identifier,
+        purpose,
+        auditTrail: dispatchResult.auditTrail,
+      });
 
-      console.error('[OTP_SERVICE] Delivery Failed — OTP Record Cleared:', { identifier, purpose, channels });
-
-      const err = new Error(safeErrorMsg);
-      const rawStatus = emailChannel?.httpStatus || smsChannel?.httpStatus;
-      // External provider status codes like 401/403 (e.g. Brevo/TextBee API key issues) must NEVER be sent as client 401 Unauthorized
-      err.status = (rawStatus && rawStatus !== 401 && rawStatus !== 403) ? rawStatus : 502;
+      const err = new Error('Verification code delivery is temporarily unavailable. Please try again later.');
+      err.status = 502;
       throw err;
     }
+
+    const finalInfo = dispatchResult.finalDeliveryInfo || {};
 
     return {
       success: true,
       message: 'OTP request accepted. Please check your phone or inbox for your verification code.',
       expiresAt,
-      channels: channels.map((c) => ({
-        channel: c.channel,
-        status: c.status,
-        ...(c.mock ? { mock: true } : {}),
+      channel: finalInfo.channel || (phone ? 'sms' : 'email'),
+      provider: finalInfo.provider,
+      channels: dispatchResult.auditTrail.map((item) => ({
+        channel: item.channel,
+        provider: item.provider,
+        status: item.success ? 'sent' : 'failed',
+        ...(item.mock ? { mock: true } : {}),
       })),
-      mock: channels.some((channel) => channel.status === 'sent' && channel.mock === true),
+      mock: !!finalInfo.mock,
       ...((process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEV_OTP === 'true') ? { devOtp: otp } : {}),
     };
   }
