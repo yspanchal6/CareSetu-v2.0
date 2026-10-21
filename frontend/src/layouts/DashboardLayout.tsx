@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Outlet, useLocation, Link } from "react-router-dom";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
@@ -10,11 +11,28 @@ import { AlertTriangle, WifiOff, ShieldAlert } from "lucide-react";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
 
 export default function DashboardLayout({ items, roleLabel }: { items: NavItem[]; roleLabel: string }) {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
   const { user } = useAuth();
   const { status: securityStatus, resolved: securityResolved, securityLoading } = useHospitalSecurity();
   const { t } = useTranslation();
   const isOnline = useOnlineStatus();
+
+  // Close mobile drawer on desktop resize (>= 1024px) to prevent stale backdrop/sidebar
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 1024) {
+        setMobileMenuOpen(false);
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Close mobile drawer when route changes
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
 
   const isHospital = user?.role === 'hospital' || user?.role?.toUpperCase() === 'HOSPITAL';
   const isBlocked = isHospital && (securityStatus === 'TEMPORARILY_BLOCKED' || securityStatus === 'UNDER_REVIEW');
@@ -24,11 +42,16 @@ export default function DashboardLayout({ items, roleLabel }: { items: NavItem[]
   const pageTitle = match ? (match.key ? t(match.key) : match.label) : t("nav.dashboard");
 
   return (
-    <div className="min-h-screen flex bg-bg">
-      <Sidebar items={items} roleLabel={roleLabel} />
-      <div className="flex-1 min-w-0 flex flex-col">
-        <Topbar title={pageTitle} />
-        <main className="flex-1 p-4 sm:p-6 max-w-[1600px] w-full mx-auto">
+    <div className="h-screen h-[100dvh] flex bg-bg dark:bg-slate-950 text-slate-800 dark:text-slate-100 overflow-hidden transition-colors duration-200">
+      <Sidebar
+        items={items}
+        roleLabel={roleLabel}
+        mobileOpen={mobileMenuOpen}
+        onMobileClose={() => setMobileMenuOpen(false)}
+      />
+      <div className="flex-1 min-h-0 min-w-0 flex flex-col h-full overflow-hidden">
+        <Topbar title={pageTitle} onMenuToggle={() => setMobileMenuOpen((v) => !v)} />
+        <main className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 md:p-6 max-w-[1600px] w-full mx-auto">
           {!isOnline && (
             <div className="mb-4 p-3.5 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2.5 text-xs text-red-800 shadow-sm animate-pulse">
               <WifiOff className="w-4 h-4 text-red-500 shrink-0" />

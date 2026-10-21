@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { ThemeProvider } from "./context/ThemeContext";
 import { AuthProvider } from "./context/AuthContext";
 import { HospitalSecurityProvider } from "./context/HospitalSecurityContext";
 import { I18nProvider } from "./i18n/I18nContext";
@@ -98,12 +99,13 @@ import { AdminHospitalAppealsPage } from "./pages/admin/AdminHospitalAppealsPage
 
 export default function App() {
   return (
-    <I18nProvider>
-      <AuthProvider>
-        <HospitalSecurityProvider>
-          <ToastProvider>
-            <SocketProvider>
-              <BrowserRouter basename={import.meta.env.BASE_URL}>
+    <ThemeProvider>
+      <I18nProvider>
+        <AuthProvider>
+          <HospitalSecurityProvider>
+            <ToastProvider>
+              <SocketProvider>
+                <BrowserRouter basename={import.meta.env.BASE_URL}>
                 <Routes>
                   {/* Public site */}
                   <Route path="/app/:opaqueId" element={<OpaqueRouteResolver />} />
@@ -302,5 +304,6 @@ export default function App() {
         </HospitalSecurityProvider>
       </AuthProvider>
     </I18nProvider>
+  </ThemeProvider>
   );
 }

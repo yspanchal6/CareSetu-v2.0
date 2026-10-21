@@ -3,6 +3,7 @@ import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { Menu, X, HeartPulse } from "lucide-react";
 import Button from "../common/Button";
 import LanguageSelector from "../common/LanguageSelector";
+import ThemeToggle from "../common/ThemeToggle";
 import { useAuth } from "../../context/AuthContext";
 import { useTranslation } from "../../i18n/I18nContext";
 
@@ -25,15 +26,21 @@ export default function PublicNavbar() {
 
   const navLinks = [
     { to: "/", label: t("nav.home") },
-    { to: "/how-it-works", label: t("nav.howItWorks") },
-    { to: "/features", label: t("nav.features") },
     { to: "/about", label: t("nav.about") },
+    { to: "/how-it-works", label: t("nav.services") || "Services" },
+    { to: "/features", label: t("nav.features") },
+    { to: "/#team", label: t("nav.team") || "Our Team", isHash: true },
     { to: "/contact", label: t("nav.contact") },
   ];
 
-  const activeIndex = navLinks.findIndex((l) =>
-    l.to === "/" ? location.pathname === "/" : location.pathname.startsWith(l.to)
-  );
+  const activeIndex = navLinks.findIndex((l) => {
+    if (l.isHash) {
+      return location.pathname === "/" && location.hash === "#team";
+    }
+    return l.to === "/"
+      ? location.pathname === "/" && !location.hash
+      : location.pathname.startsWith(l.to);
+  });
 
   const updateIndicator = useCallback(() => {
     const targetIndex = hoveredIndex !== null ? hoveredIndex : activeIndex !== -1 ? activeIndex : null;
@@ -82,7 +89,7 @@ export default function PublicNavbar() {
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-2xs transition-[background-color,border-color,box-shadow] duration-200 animate-nav-entrance motion-reduce:animate-none">
+    <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-100 dark:border-slate-800 shadow-2xs transition-[background-color,border-color,box-shadow] duration-200 animate-nav-entrance motion-reduce:animate-none">
       <div className="max-w-7xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
         <Link
           to="/"
@@ -91,39 +98,58 @@ export default function PublicNavbar() {
           <div className="w-8 h-8 rounded-lg bg-sky flex items-center justify-center transition-colors duration-200 shadow-2xs">
             <HeartPulse className="w-4.5 h-4.5 text-white" />
           </div>
-          <span className="font-extrabold text-navy text-lg tracking-tight transition-colors duration-200 group-hover:text-sky-600">
+          <span className="font-extrabold text-navy dark:text-white text-lg tracking-tight transition-colors duration-200 group-hover:text-sky-600 dark:group-hover:text-sky-400">
             CareSetu
           </span>
         </Link>
 
         <nav
           ref={navRef}
-          className="relative hidden md:flex items-center gap-1.5"
+          className="relative hidden lg:flex items-center gap-1.5"
           aria-label="Main navigation"
           onMouseLeave={() => setHoveredIndex(null)}
         >
-          {navLinks.map((l, index) => (
-            <NavLink
-              key={l.to}
-              to={l.to}
-              end={l.to === "/"}
-              ref={(el) => {
-                itemRefs.current[index] = el;
-              }}
-              onMouseEnter={() => setHoveredIndex(index)}
-              onFocus={() => setHoveredIndex(index)}
-              onBlur={() => setHoveredIndex(null)}
-              className={({ isActive }) =>
-                `relative px-3.5 py-2 rounded-lg text-sm font-medium transition-[color,background-color,border-color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 border ${
-                  isActive
-                    ? "text-navy bg-sky-50/80 border-sky-200/80 font-semibold shadow-2xs"
-                    : "text-slate-600 border-transparent hover:text-navy hover:bg-slate-50/80"
-                }`
-              }
-            >
-              {l.label}
-            </NavLink>
-          ))}
+          {navLinks.map((l, index) => {
+            const isLinkActive = l.isHash
+              ? location.pathname === "/" && location.hash === "#team"
+              : l.to === "/"
+              ? location.pathname === "/" && !location.hash
+              : location.pathname.startsWith(l.to);
+
+            return (
+              <a
+                key={l.to}
+                href={l.to}
+                ref={(el) => {
+                  itemRefs.current[index] = el;
+                }}
+                onClick={(e) => {
+                  if (l.isHash) {
+                    e.preventDefault();
+                    if (location.pathname !== "/") {
+                      navigate("/#team");
+                    } else {
+                      const el = document.getElementById("team");
+                      if (el) {
+                        el.scrollIntoView({ behavior: "smooth" });
+                        window.history.pushState(null, "", "/#team");
+                      }
+                    }
+                  }
+                }}
+                onMouseEnter={() => setHoveredIndex(index)}
+                onFocus={() => setHoveredIndex(index)}
+                onBlur={() => setHoveredIndex(null)}
+                className={`relative px-3 py-2 rounded-lg text-sm font-medium transition-[color,background-color,border-color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 border ${
+                  isLinkActive
+                    ? "text-navy dark:text-white bg-sky-50/80 dark:bg-sky-950/60 border-sky-200/80 dark:border-sky-800 font-semibold shadow-2xs"
+                    : "text-slate-600 dark:text-slate-300 border-transparent hover:text-navy dark:hover:text-white hover:bg-slate-50/80 dark:hover:bg-slate-800/80"
+                }`}
+              >
+                {l.label}
+              </a>
+            );
+          })}
 
           {/* Single Shared Sliding Underline Indicator */}
           <span
@@ -136,13 +162,14 @@ export default function PublicNavbar() {
           />
         </nav>
 
-        <div className="hidden md:flex items-center gap-2.5">
+        <div className="hidden lg:flex items-center gap-2.5">
+          <ThemeToggle size="sm" />
           <LanguageSelector variant="compact" />
           <Button
             variant="ghost"
             size="sm"
             onClick={() => navigate("/login")}
-            className="transition-colors duration-200 hover:text-navy focus-visible:ring-2 focus-visible:ring-sky-400"
+            className="transition-colors duration-200 hover:text-navy dark:hover:text-white dark:text-slate-200 focus-visible:ring-2 focus-visible:ring-sky-400"
           >
             {t("auth.login")}
           </Button>
@@ -157,10 +184,11 @@ export default function PublicNavbar() {
           </Button>
         </div>
 
-        <div className="flex md:hidden items-center gap-2">
+        <div className="flex lg:hidden items-center gap-2">
+          <ThemeToggle size="sm" />
           <LanguageSelector variant="compact" />
           <button
-            className="p-2 rounded-lg transition-colors duration-200 active:scale-95 text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+            className="p-2 rounded-lg transition-colors duration-200 active:scale-95 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
             onClick={() => setOpen(!open)}
             aria-label="Toggle navigation menu"
             aria-expanded={open}
@@ -171,25 +199,44 @@ export default function PublicNavbar() {
       </div>
 
       {open && (
-        <div className="md:hidden border-t border-slate-100 bg-white/98 backdrop-blur-md px-5 py-4 flex flex-col gap-1 animate-slideUp">
-          {navLinks.map((l) => (
-            <NavLink
-              key={l.to}
-              to={l.to}
-              end={l.to === "/"}
-              onClick={() => setOpen(false)}
-              className={({ isActive }) =>
-                `px-3.5 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 border ${
-                  isActive
-                    ? "bg-sky-50/80 text-navy border-sky-200/80 font-semibold"
-                    : "text-slate-600 border-transparent hover:bg-slate-50 hover:text-navy"
-                }`
-              }
-            >
-              {l.label}
-            </NavLink>
-          ))}
-          <div className="flex flex-col gap-2 mt-3 pt-2 border-t border-slate-100">
+        <div className="lg:hidden border-t border-slate-100 dark:border-slate-800 bg-white/98 dark:bg-slate-900/98 backdrop-blur-md px-5 py-4 flex flex-col gap-1 animate-slideUp max-h-[calc(100dvh-4rem)] overflow-y-auto overscroll-contain shadow-xl">
+          {navLinks.map((l) => {
+            const isLinkActive = l.isHash
+              ? location.pathname === "/" && location.hash === "#team"
+              : l.to === "/"
+              ? location.pathname === "/" && !location.hash
+              : location.pathname.startsWith(l.to);
+
+            return (
+              <a
+                key={l.to}
+                href={l.to}
+                onClick={(e) => {
+                  setOpen(false);
+                  if (l.isHash) {
+                    e.preventDefault();
+                    if (location.pathname !== "/") {
+                      navigate("/#team");
+                    } else {
+                      const el = document.getElementById("team");
+                      if (el) {
+                        el.scrollIntoView({ behavior: "smooth" });
+                        window.history.pushState(null, "", "/#team");
+                      }
+                    }
+                  }
+                }}
+                className={`px-3.5 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 border ${
+                  isLinkActive
+                    ? "bg-sky-50/80 dark:bg-sky-950/60 text-navy dark:text-white border-sky-200/80 dark:border-sky-800 font-semibold"
+                    : "text-slate-600 dark:text-slate-300 border-transparent hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-navy dark:hover:text-white"
+                }`}
+              >
+                {l.label}
+              </a>
+            );
+          })}
+          <div className="flex flex-col gap-2 mt-3 pt-2 border-t border-slate-100 dark:border-slate-800">
             <Button
               variant="outline"
               size="sm"
