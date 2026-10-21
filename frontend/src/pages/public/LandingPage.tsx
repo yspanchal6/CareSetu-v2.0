@@ -648,7 +648,8 @@ export default function LandingPage() {
                   return (
                     <div
                       key={st.stage}
-                      className="relative group flex flex-col items-center text-center p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800 hover:border-sky-400 dark:hover:border-sky-500 hover:shadow-lg transition-all duration-300">
+                      className="relative group flex flex-col items-center text-center p-4 rounded-2xl bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800 hover:border-sky-400 dark:hover:border-sky-500 hover:shadow-lg transition-all duration-300"
+                    >
                       {/* Directional Sequence Indicator to Next Stage (Desktop) */}
                       {!isLast && (
                         <div
@@ -658,7 +659,6 @@ export default function LandingPage() {
                           <ArrowRight className="w-3 h-3" />
                         </div>
                       )}
-                    >
                       {/* Step Indicator & Icon Node */}
                       <div className="relative mb-3">
                         <div
