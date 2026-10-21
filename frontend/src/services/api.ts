@@ -230,7 +230,11 @@ export interface EmergencyLocation {
   latitude: number;
   longitude: number;
   accuracy?: number;
-  source: "GPS";
+  source: "GPS" | "MANUAL";
+  address?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
 }
 
 export interface NearbyHospital {
@@ -428,6 +432,16 @@ export const emergencyApi = {
       emergencyType: payload.emergencyType,
       source: payload.source,
       severity: payload.severity,
+      location: {
+        latitude,
+        longitude,
+        accuracy: payload.location.accuracy,
+        source: payload.location.source || "GPS",
+        address: payload.location.address,
+        city: payload.location.city,
+        state: payload.location.state,
+        pincode: payload.location.pincode,
+      },
     };
 
     console.log("SOS payload:", requestPayload);

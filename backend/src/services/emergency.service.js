@@ -127,7 +127,7 @@ async function verifyIdempotencyMatch(existingCase, { userId, emergencyType, sym
   return true;
 }
 
-const createEmergencyCase = async ({ userId, emergencyType, severity, latitude, longitude, symptoms, idempotencyKey, source, patientMedicalHistory }) => {
+const createEmergencyCase = async ({ userId, emergencyType, severity, latitude, longitude, symptoms, idempotencyKey, source, locationDetails, patientMedicalHistory }) => {
   // 0. Idempotency Check
   if (idempotencyKey) {
     const existingCase = await emergencyRepository.getEmergencyCaseByIdempotencyKey(idempotencyKey);
@@ -236,6 +236,12 @@ const createEmergencyCase = async ({ userId, emergencyType, severity, latitude, 
       location: {
         latitude: latNum,
         longitude: lngNum,
+        ...(locationDetails?.source ? { source: locationDetails.source } : {}),
+        ...(locationDetails?.accuracy != null ? { accuracy: locationDetails.accuracy } : {}),
+        ...(locationDetails?.address ? { address: locationDetails.address } : {}),
+        ...(locationDetails?.city ? { city: locationDetails.city } : {}),
+        ...(locationDetails?.state ? { state: locationDetails.state } : {}),
+        ...(locationDetails?.pincode ? { pincode: locationDetails.pincode } : {}),
       },
       detectedWords: safetyResult.matchedRule !== 'Default' ? [safetyResult.matchedRule] : [],
       status: 'PENDING',
@@ -407,7 +413,7 @@ const createEmergencyCase = async ({ userId, emergencyType, severity, latitude, 
                 body: `${emergencyCase.severity} - ${emergencyCase.symptoms || 'Emergency'}`,
                 data: {
                   caseId: emergencyCase.caseId,
-                  distanceKm: m.distanceKm != null ? String(m.distanceKm) : '0',
+                  distanceKm: (activeMatch && activeMatch.distanceKm != null) ? String(activeMatch.distanceKm) : '0',
                   bloodGroup: bloodGroup !== null ? String(bloodGroup) : 'Not provided',
                   knownConditions: knownConditions !== null ? String(knownConditions) : 'Not provided',
                   blood_group: bloodGroup || 'Not provided',
