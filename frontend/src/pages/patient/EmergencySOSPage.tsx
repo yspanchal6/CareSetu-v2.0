@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Siren, MapPin, Phone, PhoneCall, CheckCircle2, AlertTriangle, Bot, CloudOff, RefreshCw, Loader2, User, ShieldAlert } from "lucide-react";
-import { emergencyApi, saveActiveEmergencyCase, ApiError, emergencySyncClient } from "../../services/api";
+import { Siren, MapPin, MapPinOff, Phone, PhoneCall, CheckCircle2, AlertTriangle, Bot, CloudOff, RefreshCw, Loader2, User, ShieldAlert, Navigation } from "lucide-react";
+import { emergencyApi, geocodingApi, saveActiveEmergencyCase, ApiError, emergencySyncClient } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { useTranslation } from "../../i18n/I18nContext";
 import {
@@ -33,7 +33,7 @@ interface CreatedInfo {
 function getCurrentLocation(): Promise<{ latitude: number; longitude: number; accuracy: number }> {
   return new Promise((resolve, reject) => {
     if (!("geolocation" in navigator)) {
-      reject(new Error("Location services are not available in this browser."));
+      reject(new Error("Location services are not supported by this browser."));
       return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -43,10 +43,20 @@ function getCurrentLocation(): Promise<{ latitude: number; longitude: number; ac
           longitude: coords.longitude,
           accuracy: coords.accuracy,
         }),
-      () =>
-        reject(
-          new Error("Location is required to find an emergency hospital. Please allow location access and try again.")
-        ),
+      (err) => {
+        let message = "Location is required to find an emergency hospital. Please allow location access and try again.";
+        const code = err && typeof err === "object" ? (err as any).code : undefined;
+        if (code === 1) {
+          message = "Location permission was denied. Please allow location access or enter your location manually below.";
+        } else if (code === 2) {
+          message = "GPS position is currently unavailable on your device. Please enter your location manually below.";
+        } else if (code === 3) {
+          message = "GPS location request timed out. Please retry or enter your location manually below.";
+        } else if (err && typeof (err as any).message === "string" && (err as any).message) {
+          message = (err as any).message;
+        }
+        reject(new Error(message));
+      },
       { enableHighAccuracy: true, timeout: 8000, maximumAge: 15000 }
     );
   });
@@ -57,6 +67,12 @@ export default function EmergencySOSPage() {
   const { t } = useTranslation();
   const [step, setStep] = useState<FlowStep>("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [locationError, setLocationError] = useState(false);
+  const [manualAddress, setManualAddress] = useState("");
+  const [manualCity, setManualCity] = useState("");
+  const [manualPincode, setManualPincode] = useState("");
+  const [manualGeocodeError, setManualGeocodeError] = useState("");
+  const [isGeocoding, setIsGeocoding] = useState(false);
   const [created, setCreated] = useState<CreatedInfo | null>(null);
   const [queuedOpId, setQueuedOpId] = useState<string | null>(null);
   const [offlineQueue, setOfflineQueue] = useState(() => getOfflineQueueStatus());
@@ -106,7 +122,8 @@ export default function EmergencySOSPage() {
       const res = await emergencyApi.create({
         symptoms: preset?.symptoms ?? "Not provided",
         emergencyType: preset?.emergencyType ?? "OTHER",
-        source: preset?.source,
+        source: preset?.source ?? "DIRECT",
+        severity: "CRITICAL",
         location: {
           latitude: pos.latitude,
           longitude: pos.longitude,
@@ -163,6 +180,18 @@ export default function EmergencySOSPage() {
 
       setCreated(null);
       setStep("error");
+
+      // Check whether failure happened while acquiring location or if error explicitly refers to location/GPS.
+      const isLocErr = (typeof pos === "undefined" && !(err instanceof ApiError)) || (
+        !err?.status && (
+          err?.message?.includes("Location") ||
+          err?.message?.includes("GPS") ||
+          err?.message?.includes("position") ||
+          err?.message?.includes("permission")
+        )
+      );
+      setLocationError(Boolean(isLocErr));
+
       if (err instanceof ApiError) {
         if (err.status === 401) {
           setErrorMessage("Authentication session required or expired. Please log in to dispatch an emergency SOS.");
@@ -178,14 +207,70 @@ export default function EmergencySOSPage() {
           setErrorMessage(err.message || "Emergency request failed. Please call 108 for immediate help.");
         }
       } else {
+        const rawMsg = err?.message || (typeof err === "string" ? err : "");
         setErrorMessage(
-          err?.message?.includes("Location")
-            ? err.message
-            : err?.message
-            ? `${err.message} — Please call 108 for immediate help.`
+          isLocErr
+            ? (rawMsg || "Location access failed. Please allow location access or enter your location manually below.")
+            : rawMsg
+            ? `${rawMsg} — Please call 108 for immediate help.`
             : "SOS failed. Please call 108 for immediate help."
         );
       }
+    }
+  };
+
+  const submitManualLocation = async () => {
+    const rawAddr = manualAddress.trim();
+    const rawCity = manualCity.trim();
+    const rawPin = manualPincode.trim();
+
+    if (!rawAddr && !rawCity && !rawPin) {
+      setManualGeocodeError("Please enter your area/landmark, city, or pincode.");
+      return;
+    }
+    if (rawPin && !/^\d{6}$/.test(rawPin)) {
+      setManualGeocodeError("Please enter a valid 6-digit Indian postal pincode.");
+      return;
+    }
+
+    setManualGeocodeError("");
+    setIsGeocoding(true);
+    try {
+      const geoRes = await geocodingApi.geocode(rawAddr, rawCity, "", rawPin);
+      if (!geoRes || typeof geoRes.latitude !== "number" || typeof geoRes.longitude !== "number" || !Number.isFinite(geoRes.latitude) || !Number.isFinite(geoRes.longitude)) {
+        throw new Error("Unable to locate this address. Please verify your city or pincode.");
+      }
+
+      setStep("creating");
+      const res = await emergencyApi.create({
+        symptoms: "Not provided",
+        emergencyType: "OTHER",
+        source: "DIRECT",
+        severity: "CRITICAL",
+        location: {
+          latitude: geoRes.latitude,
+          longitude: geoRes.longitude,
+          source: "MANUAL",
+          address: rawAddr,
+          city: rawCity,
+          pincode: rawPin,
+        },
+        idempotencyKey: crypto.randomUUID(),
+      });
+
+      const internalCaseId = res.caseId || res.publicCaseId;
+      if (!internalCaseId) throw new Error("No case ID returned by the emergency service.");
+
+      const publicCaseId = res.publicCaseId || res.caseId;
+      sessionStorage.setItem("caresetu_active_emergency_case", publicCaseId || internalCaseId);
+      saveActiveEmergencyCase(publicCaseId || internalCaseId);
+
+      setCreated({ caseId: internalCaseId, publicCaseId: publicCaseId || internalCaseId });
+      setStep("created");
+    } catch (err: any) {
+      console.error("[ManualLocationSOS]", err);
+      setIsGeocoding(false);
+      setManualGeocodeError(err?.message || "Failed to locate address. Please check and retry, or call 108.");
     }
   };
 
@@ -238,14 +323,96 @@ export default function EmergencySOSPage() {
           </a>
         </div>
 
+        {locationError && (
+          <div className="w-full mt-6 border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/70 rounded-card p-4 text-left">
+            <div className="flex items-center gap-2 mb-2">
+              <Navigation className="w-4 h-4 text-sky-600 dark:text-sky-400" />
+              <p className="text-sm font-bold text-slate-900 dark:text-white">Enter Location Manually</p>
+            </div>
+            <p className="text-xs text-slate-600 dark:text-slate-300 mb-3">
+              We will geocode your area/city to find and alert the nearest verified hospitals.
+            </p>
+
+            <div className="space-y-2.5">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Area / Landmark / Street <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={manualAddress}
+                  onChange={(e) => setManualAddress(e.target.value)}
+                  placeholder="e.g. Near Station Circle, Civil Lines"
+                  className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    City <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={manualCity}
+                    onChange={(e) => setManualCity(e.target.value)}
+                    placeholder="e.g. Anand"
+                    className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Pincode (6 digits)
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    value={manualPincode}
+                    onChange={(e) => setManualPincode(e.target.value.replace(/\D/g, ""))}
+                    placeholder="e.g. 388001"
+                    className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+              </div>
+
+              {manualGeocodeError && (
+                <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">
+                  {manualGeocodeError}
+                </p>
+              )}
+
+              <button
+                type="button"
+                onClick={submitManualLocation}
+                disabled={isGeocoding}
+                className="w-full flex items-center justify-center gap-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-xl py-2.5 px-3 transition-colors disabled:opacity-60 shadow-sm mt-1"
+              >
+                {isGeocoding ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Finding Hospitals for Location…
+                  </>
+                ) : (
+                  <>
+                    <MapPin className="w-3.5 h-3.5" />
+                    Submit Location & Dispatch SOS
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
         <button
           onClick={() => {
             setStep("idle");
             setErrorMessage("");
+            setLocationError(false);
+            setManualGeocodeError("");
           }}
           className="mt-6 text-sm font-bold text-sky-600 dark:text-sky-400 hover:underline"
         >
-          ← Try again
+          ← Try GPS again
         </button>
       </div>
     );
@@ -271,7 +438,7 @@ export default function EmergencySOSPage() {
           {offlineQueue.syncing ? (
             <>
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              Syncing…
+              Outcome unknown — checking submission status.
             </>
           ) : (
             <>
@@ -381,7 +548,7 @@ export default function EmergencySOSPage() {
             {offlineQueue.authRequired
               ? "Your session expired — sign in again to send it to hospitals."
               : offlineQueue.syncing
-              ? "Syncing to the emergency service…"
+              ? "Outcome unknown — checking submission status."
               : "It will be delivered automatically as soon as you're back online."}
           </p>
           {!offlineQueue.syncing && !offlineQueue.authRequired && navigator.onLine && (
@@ -445,33 +612,52 @@ export default function EmergencySOSPage() {
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-8 text-center max-w-xs leading-relaxed">
           One tap sends your real location and emergency to best-matched nearby hospitals instantly.
         </p>
+
+        {step === "locating" && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="w-full max-w-sm mt-4 p-3 bg-sky-50 dark:bg-sky-950/70 border border-sky-200 dark:border-sky-800 rounded-xl flex items-center gap-2.5 text-left text-xs text-sky-950 dark:text-sky-200 animate-fade-in"
+          >
+            <Loader2 className="w-4 h-4 text-sky-600 dark:text-sky-400 animate-spin shrink-0" />
+            <div>
+              <p className="font-bold">Acquiring high-accuracy GPS coordinates…</p>
+              <p className="text-[11px] text-sky-800 dark:text-sky-300">
+                Please keep your device still. If permission is denied or times out, you can enter your address manually.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-10">Need to speak to someone directly?</p>
       <a
         href="tel:108"
+        aria-label="Call 108 Emergency Service directly"
         className="flex items-center gap-2 text-sm font-extrabold text-rose-600 dark:text-rose-400 mt-1 hover:underline"
       >
         <Phone className="w-4 h-4" /> Call 108 Emergency Service
       </a>
 
-      <div className="w-full mt-8 pt-6 border-t border-slate-200 dark:border-slate-800">
-        <button
-          onClick={() => dispatchSOS(CHATBOT_PRESET)}
-          disabled={step !== "idle"}
-          className="w-full flex items-center gap-3 rounded-2xl border border-sky-200 dark:border-sky-800/60 bg-sky-50 dark:bg-slate-850 p-4 text-left transition-all hover:bg-sky-100 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed shadow-card"
-        >
-          <span className="w-10 h-10 rounded-xl bg-sky-500 text-white flex items-center justify-center shrink-0 shadow-glow">
-            <Bot className="w-5 h-5" />
-          </span>
-          <span className="flex-1">
-            <span className="block text-sm font-bold text-slate-900 dark:text-white">[Demo] Simulate Chatbot SOS</span>
-            <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              AI-detected emergency from a chatbot conversation
+      {import.meta.env.DEV && (
+        <div className="w-full mt-8 pt-6 border-t border-slate-200 dark:border-slate-800">
+          <button
+            onClick={() => dispatchSOS(CHATBOT_PRESET)}
+            disabled={step !== "idle"}
+            className="w-full flex items-center gap-3 rounded-2xl border border-sky-200 dark:border-sky-800/60 bg-sky-50 dark:bg-slate-850 p-4 text-left transition-all hover:bg-sky-100 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed shadow-card"
+          >
+            <span className="w-10 h-10 rounded-xl bg-sky-500 text-white flex items-center justify-center shrink-0 shadow-glow">
+              <Bot className="w-5 h-5" />
             </span>
-          </span>
-        </button>
-      </div>
+            <span className="flex-1">
+              <span className="block text-sm font-bold text-slate-900 dark:text-white">[Demo] Simulate Chatbot SOS</span>
+              <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                AI-detected emergency from a chatbot conversation (Development only)
+              </span>
+            </span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
