@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
-import { emergencyApi, getActiveEmergencyCase, EmergencyCaseStatus, EmergencyAttempt } from "../../services/api";
+import { useParams, Link } from "react-router-dom";
+import { emergencyApi, healthPackApi, getActiveEmergencyCase, EmergencyCaseStatus, EmergencyAttempt } from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
 import { Card } from "../../components/common/Card";
 import Button from "../../components/common/Button";
 import Modal from "../../components/common/Modal";
@@ -12,6 +13,7 @@ import {
   HospitalRejectedCard,
   HospitalAcceptedCard,
   TransferCard,
+  PatientArrivedCard,
   TreatmentCard,
   CompletedCard,
 } from "../../components/emergency/HospitalCards";
@@ -29,7 +31,7 @@ const STATUS_TO_STAGE: Record<string, string> = {
   ASSIGNED: "HospitalAssigned",
   TRANSFER: "Transfer",
   IN_TRANSFER: "Transfer",
-  IN_PROGRESS: "Transfer",
+  IN_PROGRESS: "PatientArrived",
   TREATMENT: "Treatment",
   IN_TREATMENT: "Treatment",
   RESOLVED: "Completed",
@@ -45,6 +47,7 @@ const STAGE_LABELS: Record<string, string> = {
   FindingHospital: "Finding a hospital",
   HospitalAssigned: "Hospital accepted",
   Transfer: "Transfer in progress",
+  PatientArrived: "Patient arrived at hospital",
   Treatment: "Treatment in progress",
   Completed: "Emergency completed",
 };
@@ -63,6 +66,10 @@ export default function EmergencyStatusPage() {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const { showToast } = useToast();
+
+  const { user, isGuest } = useAuth();
+  const [guestHelpOpen, setGuestHelpOpen] = useState(false);
+  const [sharingHealthPack, setSharingHealthPack] = useState(false);
 
   // Resolve the case reference (URL param or last active case)
   const caseRef = useMemo(() => {
@@ -108,6 +115,23 @@ export default function EmergencyStatusPage() {
     }
   };
 
+  const handleShareHealthPack = async () => {
+    if (!caseData || !acceptedHospital) return;
+    if (isGuest) {
+      setGuestHelpOpen(true);
+      return;
+    }
+    setSharingHealthPack(true);
+    try {
+      await healthPackApi.share(caseData.caseId || caseRef, acceptedHospital.id);
+      showToast("success", `Secure Health Pack shared with ${acceptedHospital.name}`);
+    } catch (err: any) {
+      showToast("error", err?.message || "Could not share Health Pack at this time.");
+    } finally {
+      setSharingHealthPack(false);
+    }
+  };
+
   // Initial load
   useEffect(() => {
     if (!caseRef) {
@@ -124,6 +148,9 @@ export default function EmergencyStatusPage() {
     if (!caseRef) return;
     const unsubscribeForRef = subscribeEmergencyEvents(caseRef, (eventName) => {
       setLastEventType(eventName);
+      if (eventName === "emergency:no-hospital") {
+        setNoHospitalReceived(true);
+      }
       void load();
     });
 
@@ -133,6 +160,9 @@ export default function EmergencyStatusPage() {
     if (caseData?.caseId && caseData.caseId !== caseRef) {
       unsubscribeForCaseId = subscribeEmergencyEvents(caseData.caseId, (eventName) => {
         setLastEventType(eventName);
+        if (eventName === "emergency:no-hospital") {
+          setNoHospitalReceived(true);
+        }
         void load();
       });
     }
@@ -165,6 +195,8 @@ export default function EmergencyStatusPage() {
     }
   }, [connected, load]);
 
+  const [noHospitalReceived, setNoHospitalReceived] = useState(false);
+
   const stage = STATUS_TO_STAGE[caseData?.status ?? ""] || "FindingHospital";
   const cancelled = caseData?.status === "CANCELLED";
 
@@ -174,9 +206,9 @@ export default function EmergencyStatusPage() {
     [attempts]
   );
 
-  // Hospitals that could not accept (explicit rejection or response timeout).
+  // Hospitals that did not accept (explicit rejection, response timeout, or standing down)
   const rejectedAttempts = useMemo(
-    () => attempts.filter((a) => a.status === "REJECTED" || a.status === "EXPIRED"),
+    () => attempts.filter((a) => a.status === "REJECTED" || a.status === "EXPIRED" || a.status === "CANCELLED"),
     [attempts]
   );
 
@@ -197,10 +229,15 @@ export default function EmergencyStatusPage() {
   const acceptedHospital = acceptedAttempt?.hospital || caseData?.hospital || null;
   const acceptedDistance = acceptedAttempt?.distanceKm ?? null;
 
+  // True if:
+  // 1. Explicit emergency:no-hospital event was received from backend, OR
+  // 2. All contacted candidate hospitals rejected/expired and none is pending, OR
+  // 3. Initial load completed, stage is FindingHospital, no hospital accepted, and zero requests ever existed (0 matching candidates)
   const noHospital =
     stage === "FindingHospital" &&
     !pendingAttempt &&
-    rejectedAttempts.length > 0;
+    !acceptedHospital &&
+    (noHospitalReceived || rejectedAttempts.length > 0 || (!loading && attempts.length === 0 && Boolean(caseData)));
 
   if (loading) {
     return (
@@ -301,25 +338,56 @@ export default function EmergencyStatusPage() {
 
           {noHospital && (
             <Card className="p-4 bg-red-50 border border-red-200">
-              <p className="text-sm font-semibold text-red-800">No hospital available right now</p>
-              <p className="text-xs text-red-600 mt-1">
-                Every suitable hospital was contacted but none could accept. Emergency services (108) have been escalated.
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-ping" />
+                <p className="text-sm font-bold text-red-900">No matching hospital available right now</p>
+              </div>
+              <p className="text-xs text-red-700 mt-1.5 leading-relaxed">
+                {rejectedAttempts.length > 0
+                  ? "All suitable nearby hospitals within range were contacted, but none were able to accept this emergency at this time."
+                  : "No eligible network hospitals with matching emergency capabilities were found within the 25 km search radius."}
               </p>
+              <div className="mt-3.5 pt-3 border-t border-red-200/80">
+                <p className="text-xs font-semibold text-red-800 mb-2">Escalate immediately via direct emergency phone line:</p>
+                <div className="flex gap-2">
+                  <a
+                    href="tel:108"
+                    aria-label="Call 108 Emergency Ambulance Service"
+                    className="flex-1 flex items-center justify-center gap-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 active:scale-[0.98] transition-all rounded-xl py-2.5 px-3 shadow-emergency"
+                  >
+                    📞 Call 108
+                  </a>
+                  <a
+                    href="tel:112"
+                    aria-label="Call 112 All-India Emergency Helpline"
+                    className="flex-1 flex items-center justify-center gap-1.5 text-xs font-bold text-white bg-red-800 hover:bg-red-900 active:scale-[0.98] transition-all rounded-xl py-2.5 px-3"
+                  >
+                    🚨 Call 112
+                  </a>
+                </div>
+              </div>
             </Card>
           )}
         </>
       )}
 
       {stage === "HospitalAssigned" && acceptedHospital && !cancelled && (
-        <HospitalAcceptedCard hospital={acceptedHospital} />
+        <HospitalAcceptedCard hospital={acceptedHospital} assignedDoctor={(caseData as any)?.medicalSummary?.assignedDoctor} />
       )}
 
       {stage === "Transfer" && acceptedHospital && !cancelled && (
         <TransferCard hospital={acceptedHospital} eta={null} distance={acceptedDistance} />
       )}
 
+      {stage === "PatientArrived" && acceptedHospital && !cancelled && (
+        <PatientArrivedCard
+          hospital={acceptedHospital}
+          assignedDoctor={(caseData as any)?.medicalSummary?.assignedDoctor}
+        />
+      )}
+
       {stage === "Treatment" && acceptedHospital && !cancelled && (
-        <TreatmentCard hospital={acceptedHospital} />
+        <TreatmentCard hospital={acceptedHospital} assignedDoctor={(caseData as any)?.medicalSummary?.assignedDoctor} />
       )}
 
       {stage === "Completed" && !cancelled && <CompletedCard caseId={caseData.caseId ?? undefined} />}
@@ -339,21 +407,24 @@ export default function EmergencyStatusPage() {
           <div>
             <p className="font-semibold text-navy text-sm">Secure Health Pack</p>
             <p className="text-xs text-slate-500">
-              {acceptedHospital
+              {isGuest
+                ? "Guest SOS — sign in to sync encrypted medical records"
+                : acceptedHospital
                 ? `Share with ${acceptedHospital.name}`
                 : "Available after a hospital is assigned"}
             </p>
           </div>
         </div>
         <button
-          disabled={!acceptedHospital}
-          className={`text-xs font-semibold px-4 py-2 rounded-lg ${
+          onClick={handleShareHealthPack}
+          disabled={!acceptedHospital || sharingHealthPack}
+          className={`text-xs font-semibold px-4 py-2 rounded-lg transition-colors ${
             acceptedHospital
-              ? "bg-sky-500 text-white hover:bg-sky-600"
+              ? "bg-sky-500 text-white hover:bg-sky-600 active:scale-95"
               : "bg-slate-100 text-slate-400 cursor-not-allowed"
           }`}
         >
-          Share
+          {sharingHealthPack ? "Sharing…" : isGuest ? "Info" : "Share"}
         </button>
       </Card>
 
@@ -379,14 +450,63 @@ export default function EmergencyStatusPage() {
         )}
       </Card>
 
-      {/* CANCEL CONFIRMATION */}
-      <Modal open={cancelOpen} onClose={() => setCancelOpen(false)} title="Cancel SOS?" size="sm">
-        <p className="text-sm text-text-secondary mb-5">
-          Cancel this emergency request? Hospitals currently being notified will stop receiving it. This is only possible while a hospital is still being searched.
-        </p>
-        <div className="flex gap-2">
-          <Button variant="outline" fullWidth onClick={() => setCancelOpen(false)}>Keep it going</Button>
-          <Button variant="danger" fullWidth loading={cancelling} onClick={handleCancel}>Cancel Emergency</Button>
+      {/* CANCEL CONFIRMATION — TWO-STEP EXPLICIT GUARD */}
+      <Modal open={cancelOpen} onClose={() => setCancelOpen(false)} title="Confirm Emergency Cancellation" size="sm">
+        <div className="space-y-3.5">
+          <div className="p-3 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 rounded-xl text-amber-900 dark:text-amber-200 text-xs leading-relaxed">
+            <p className="font-bold mb-1">⚠️ Warning: Consequence of Cancellation</p>
+            <p>
+              Cancelling will immediately recall this SOS request. Hospitals currently evaluating this emergency will stop receiving alerts.
+            </p>
+          </div>
+          <p className="text-xs text-slate-600 dark:text-slate-300">
+            Are you sure you want to stop hospital matching? If you are still in danger, please keep this request active or call 108 directly.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-2 pt-2">
+            <Button
+              variant="outline"
+              fullWidth
+              onClick={() => setCancelOpen(false)}
+              className="order-2 sm:order-1"
+            >
+              Keep Emergency Active
+            </Button>
+            <Button
+              variant="danger"
+              fullWidth
+              loading={cancelling}
+              onClick={handleCancel}
+              className="order-1 sm:order-2"
+            >
+              Confirm Cancellation
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* GUEST HEALTH PACK INFO MODAL */}
+      <Modal open={guestHelpOpen} onClose={() => setGuestHelpOpen(false)} title="Guest Health Pack Notice" size="sm">
+        <div className="space-y-3">
+          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+            Your emergency SOS was dispatched using a temporary Guest session. Because guest sessions do not store persistent encryption keys, pre-uploaded medical documents are not attached.
+          </p>
+          <div className="p-3 bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 rounded-xl text-sky-900 dark:text-sky-200 text-xs">
+            <p className="font-semibold mb-1">Emergency Hospital Informed</p>
+            <p>The assigned hospital has already received your GPS coordinates and reported symptoms.</p>
+          </div>
+          <p className="text-xs text-slate-500">
+            To store chronic illnesses, allergies, and permanent health packs for one-tap sharing, please register or sign in.
+          </p>
+          <div className="flex gap-2 pt-2">
+            <Button variant="outline" fullWidth onClick={() => setGuestHelpOpen(false)}>
+              Got it
+            </Button>
+            <Link to="/login" className="flex-1">
+              <Button variant="primary" fullWidth>
+                Sign In
+              </Button>
+            </Link>
+          </div>
         </div>
       </Modal>
     </div>
