@@ -528,13 +528,6 @@ curl -s https://api.caresetu.in/health
 
 ## 👥 Team & Contributors — Smart India Hackathon 2026
 
-| Member | Role | Responsibility | GitHub Profile |
-|:---:|:---|:---|:---|
-| 👑 | **Yash Panchal** | Team Lead & Full-Stack Architect | [@yspanchal6](https://github.com/yspanchal6) |
-| 💻 | **Frontend Lead** | UI/UX & React PWA Architecture | [@kritika1265](https://github.com/kritika1265) |
-| ⚙️ | **Backend Lead** | API Services & Database Infrastructure | [@CareSetu-Team](https://github.com/yspanchal6/CareSetu-v2.0) |
-| 🤖 | **AI/ML Specialist** | Medical NLP & Symptom Extraction Sidecar | [@princy-prajapati](https://github.com/princy-prajapati) |
-| 🩺 | **Healthcare Operations** | Clinical Triage & Safety Rule Compliance | [@CareSetu-Team](https://github.com/yspanchal6/CareSetu-v2.0) |
 
 | Member | Role & Track | Core Responsibilities & Contributions | Focus Area | GitHub Profile |
 | :---: | :--- | :--- | :--- | :---: |
