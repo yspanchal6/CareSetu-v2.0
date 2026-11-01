@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/PostgreSQL-PostGIS-4169e1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/Prisma-ORM-2d3748?style=for-the-badge&logo=prisma&logoColor=white" alt="Prisma" />
   <img src="https://img.shields.io/badge/Frontend-Cloudflare_Pages-f38020?style=for-the-badge&logo=cloudflare&logoColor=white" alt="Cloudflare Pages" />
-  <img src="https://img.shields.io/badge/Backend-Railway-0B0D0E?style=for-the-badge&logo=railway&logoColor=white" alt="Railway" />
+  <img src="https://img.shields.io/badge/Backend-Render.com-46E3B7?style=for-the-badge&logo=render&logoColor=black" alt="Railway" />
   <img src="https://img.shields.io/badge/Database-Supabase_PostGIS-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase PostGIS" />
   <img src="https://img.shields.io/badge/Security-Hardened-emerald?style=for-the-badge" alt="Security Hardened" />
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License" />
@@ -234,7 +234,7 @@ flowchart TD
 ## 🛠️ Technology Stack
 
 * **Frontend**: React 18, TypeScript, Vite, Tailwind CSS, Lucide Icons, Socket.IO Client, PWA Service Worker. Hosted on **Cloudflare Pages** (Global Edge CDN, zero egress).
-* **Backend**: Node.js 20, Express.js, Prisma ORM 7 (`@prisma/adapter-pg`), Socket.IO, Crypto (AES-256-GCM / AES-256-CBC), Rate Limiters. Hosted on **Railway** (Automated builds, rolling restarts, native WSS support).
+* **Backend**: Node.js 20, Express.js, Prisma ORM 7 (`@prisma/adapter-pg`), Socket.IO, Crypto (AES-256-GCM / AES-256-CBC), Rate Limiters. Hosted on **Render.com** (Native Web Service, continuous deployment from GitHub, WebSocket/WSS support, automatic TLS).
 * **Database**: Managed **Supabase PostgreSQL 15+** with PostGIS spatial extension (`ST_DWithin`, `ST_DistanceSphere`).
 * **Offsite Storage & Backups**: **Cloudflare R2** (S3-compatible, zero-egress encrypted database snapshots).
 * **Integrations**: TextBee (SMS Gateway & OTP), Brevo (Email SMTP & OTP), Firebase Cloud Messaging (FCM Push Alerts).
@@ -295,12 +295,12 @@ CareSetu is structured to deploy smoothly across modern, decoupled low-cost and 
 | Tier | Provider | Plan & Free-Tier Quota | Production Role & Architectural Safeguards |
 | :--- | :--- | :--- | :--- |
 | **Frontend** | **Cloudflare Pages** | Free Plan (Unlimited requests, 100 custom domains) | Hosts the production SPA (`dist/`). Global edge CDN, automated TLS/HTTPS, zero egress bandwidth costs. |
-| **Backend API** | **Railway** | Free / Hobby Plan ($5/mo compute credit) | Runs the Node.js Express & Socket.IO server. Native WebSocket (`wss://`) upgrade routing, health monitoring, rolling deployments. |
+| **Backend API** | **Render.com** | Free / Starter Web Service | Runs the Node.js Express & Socket.IO API server. Automated CI/CD deployments from GitHub, native WebSocket (`wss://`) upgrade routing, health checks, and SSL/TLS. |
 | **Database** | **Supabase** | Free Plan (500 MB database, PostGIS enabled) | Managed PostgreSQL with PostGIS extension. Connection pooling managed via `@prisma/adapter-pg` (`DATABASE_POOL_MAX=10`). |
 | **Offsite Backups** | **Cloudflare R2** | Free Plan (10 GB storage, $0 egress fees) | S3-compatible cold storage for daily encrypted database dumps (`pg_dump -Fc`). |
 
 ### Free-Tier Operating Boundaries & Limitations:
-* **Railway Compute Limits:** Free monthly compute credits (~500 hours) support demo/pilot operations. For 24/7 continuous emergency uptime, upgrading to Railway Hobby ($5/mo) ensures uninterrupted sweeper operation.
+* **Render Web Service Operations:** Render free tier services automatically spin down after inactivity and spin back up upon incoming requests. For uninterrupted 24/7 emergency dispatch and database timeout sweeper operations, a persistent background instance or health ping keep-alive is recommended.
 * **Supabase Inactivity Pausing:** Supabase free-tier projects auto-pause after 7 days of inactivity. CareSetu's background sweeper and automated health checks maintain active connection heartbeats, but offsite backups to Cloudflare R2 are mandatory.
 * **Email Quota (Brevo):** Brevo free tier enforces a strict limit of 300 emails/day. High-volume emergency notifications prioritize SMS (TextBee) and FCM push alerts.
 * **SMS Gateway (TextBee):** Requires an active connected Android gateway device for physical SMS dispatch.
@@ -312,7 +312,7 @@ CareSetu is structured to deploy smoothly across modern, decoupled low-cost and 
 > [!CAUTION]
 > **Zero Exposure Policy:** Never commit `.env` files or log private keys. Values below are configuration reference templates only.
 
-### Backend (`backend/.env` / Railway Environment)
+### Backend (`backend/.env` / Render.com Environment)
 | Variable | Required Type | Purpose |
 | :--- | :--- | :--- |
 | `NODE_ENV` | `"production"` | Activates security hardening, blocks arbitrary Cloudflare quick-tunnels, sanitizes error logs. |
@@ -381,7 +381,7 @@ node scripts/backfill-doctor-staff.js
 ### Distinction of Availability Concepts:
 * **Database Backup (Cold Storage):** A point-in-time snapshot file (`.dump`) saved in an independent cloud region (Cloudflare R2). If the primary database fails or data is corrupted, data is restored into a clean database. (RPO: 24h, RTO: 30-45m).
 * **Database Replica (Warm Standby):** A continuously synchronized read-only PostgreSQL instance streaming WAL logs. Allows near-zero RPO read-failover. *(Requires Supabase Pro or dedicated managed DB cluster).*
-* **Standby Backend:** A secondary dormant or minimal Node.js instance on an independent host (e.g. Render or Fly.io) configured with identical environment variables, ready to receive traffic if Railway experiences downtime.
+* **Standby Backend:** A secondary dormant or minimal Node.js instance on an independent host (e.g. Fly.io or Railway) configured with identical environment variables, ready to receive traffic if Render experiences downtime.
 
 ### Recovery Targets:
 * **Recovery Point Objective (RPO):** Maximum 24 hours (daily cold snapshots) on Free Tier; near-zero with WAL archiving.
@@ -391,7 +391,7 @@ node scripts/backfill-doctor-staff.js
 flowchart TD
     subgraph Primary ["Primary Live Infrastructure"]
         SupabaseLive[("Supabase Live DB (Primary)")]
-        RailwayLive["Railway Backend (Active)"]
+        RenderLive["Render Backend (Active)"]
     end
 
     subgraph BackupPipeline ["Automated Daily Backup Pipeline"]
@@ -403,13 +403,13 @@ flowchart TD
 
     subgraph DisasterRecovery ["Disaster Recovery Scenarios"]
         SupaOutage{Supabase Primary Outage?}
-        RailwayOutage{Railway Node Outage?}
+        RenderOutage{Render Web Service Outage?}
         SupaOutage -- Yes --> SpinNewDB["Provision Standby PostgreSQL"]
         SpinNewDB --> FetchR2["Download Latest Dump from R2"]
         FetchR2 --> RestoreDB["pg_restore --clean --if-exists"]
-        RestoreDB --> UpdateDBURL["Update DATABASE_URL in Railway"]
+        RestoreDB --> UpdateDBURL["Update DATABASE_URL in Render.com"]
 
-        RailwayOutage -- Yes --> SpinStandby["Spin Standby Node / Render"]
+        RenderOutage -- Yes --> SpinStandby["Spin Standby Node / Fly.io"]
         SpinStandby --> SwitchDNS["Switch API CNAME / DNS Routing"]
     end
 
