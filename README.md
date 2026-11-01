@@ -1,25 +1,33 @@
 # CareSetu — AI-Integrated Healthcare & Emergency Response Platform
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Platform-CareSetu-0284c7?style=for-the-badge&logo=react" alt="CareSetu Platform" />
-  <img src="https://img.shields.io/badge/React-18.3-61dafb?style=for-the-badge&logo=react" alt="React" />
-  <img src="https://img.shields.io/badge/TypeScript-5.6-3178c6?style=for-the-badge&logo=typescript" alt="TypeScript" />
-  <img src="https://img.shields.io/badge/Node.js-Express-339933?style=for-the-badge&logo=node.js" alt="Node.js" />
-  <img src="https://img.shields.io/badge/PostgreSQL-PostGIS-4169e1?style=for-the-badge&logo=postgresql" alt="PostgreSQL" />
-  <img src="https://img.shields.io/badge/Prisma-ORM-2d3748?style=for-the-badge&logo=prisma" alt="Prisma" />
-  <img src="https://img.shields.io/badge/Hosting-Cloudflare_Pages-f38020?style=for-the-badge&logo=cloudflare" alt="Cloudflare Pages" />
-  <img src="https://img.shields.io/badge/API-Railway-0B0D0E?style=for-the-badge&logo=railway" alt="Railway" />
-  <img src="https://img.shields.io/badge/DB-Supabase_PostGIS-3ECF8E?style=for-the-badge&logo=supabase" alt="Supabase PostGIS" />
+  <a href="https://caresetu.pages.dev/"><img src="https://img.shields.io/badge/Live_Deployment-caresetu.pages.dev-0284c7?style=for-the-badge&logo=cloudflarepages&logoColor=white" alt="Live Demo" /></a>
+  <img src="https://img.shields.io/badge/React-18.3-61dafb?style=for-the-badge&logo=react&logoColor=black" alt="React" />
+  <img src="https://img.shields.io/badge/TypeScript-5.6-3178c6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Node.js-Express-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js" />
+  <img src="https://img.shields.io/badge/PostgreSQL-PostGIS-4169e1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/Prisma-ORM-2d3748?style=for-the-badge&logo=prisma&logoColor=white" alt="Prisma" />
+  <img src="https://img.shields.io/badge/Frontend-Cloudflare_Pages-f38020?style=for-the-badge&logo=cloudflare&logoColor=white" alt="Cloudflare Pages" />
+  <img src="https://img.shields.io/badge/Backend-Railway-0B0D0E?style=for-the-badge&logo=railway&logoColor=white" alt="Railway" />
+  <img src="https://img.shields.io/badge/Database-Supabase_PostGIS-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase PostGIS" />
+  <img src="https://img.shields.io/badge/Security-Hardened-emerald?style=for-the-badge" alt="Security Hardened" />
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License" />
+</p>
+
+<p align="center">
+  🌐 <strong>Deployed Live Application:</strong> <a href="https://caresetu.pages.dev/"><strong>https://caresetu.pages.dev/</strong></a>
 </p>
 
 ---
 
 ## 🌟 Overview
 
-**CareSetu** is an end-to-end, AI-integrated healthcare coordination and emergency response platform designed to save lives by connecting patients to the right healthcare facilities at the right time.
+> 🌐 **Live Web Application:** [https://caresetu.pages.dev/](https://caresetu.pages.dev/)  
+> *Access real-time emergency SOS routing, AI-assisted triage, encrypted HealthPacks, and multi-portal clinical coordination live in production.*
 
-CareSetu bridges the gap between emergency triage, location-aware progressive hospital matching, encrypted medical records (HealthPacks), real-time response dashboards, and offline emergency continuity.
+**CareSetu** is an end-to-end, AI-assisted healthcare coordination and emergency routing platform developed for high-acuity patient triage, location-aware progressive hospital matching, encrypted medical record coordination (HealthPacks), and real-time clinical workflows across Patient, Hospital, Doctor, Clinic, and Admin portals.
+
+The platform is designed to run securely and reliably within approved low-cost and free-tier cloud architectures, maintaining strict boundary enforcement, tamper-evident security epochs, and verifiable disaster recovery procedures.
 
 ---
 
@@ -238,7 +246,7 @@ flowchart TD
 
 ### Prerequisites
 * **Node.js**: `v20.x` or higher
-* **PostgreSQL**: `v15.x` or higher with PostGIS extension enabled (`CREATE EXTENSION IF NOT EXISTS postgis;`)
+* **PostgreSQL**: `v16.x` with PostGIS extension enabled
 * **Git**
 
 ### 1. Clone Repository & Setup Environment
