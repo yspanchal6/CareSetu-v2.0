@@ -527,13 +527,16 @@ curl -s https://api.caresetu.in/health
 
 ## 👥 Team & Contributors — Smart India Hackathon 2026
 
-| Member | Role | Responsibility | GitHub Profile |
-|:---:|:---|:---|:---|
-| 👑 | **Yash Panchal** | Team Lead & Full-Stack Architect | [@yspanchal6](https://github.com/yspanchal6) |
-| 💻 | **Frontend Lead** | UI/UX & React PWA Architecture | [@CareSetu-Team](https://github.com/yspanchal6/CareSetu-v2.0) |
-| ⚙️ | **Backend Lead** | API Services & Database Infrastructure | [@CareSetu-Team](https://github.com/yspanchal6/CareSetu-v2.0) |
-| 🤖 | **AI/ML Specialist** | Medical NLP & Symptom Extraction Sidecar | [@CareSetu-Team](https://github.com/yspanchal6/CareSetu-v2.0) |
-| 🩺 | **Healthcare Operations** | Clinical Triage & Safety Rule Compliance | [@CareSetu-Team](https://github.com/yspanchal6/CareSetu-v2.0) |
+A multidisciplinary engineering team combining distributed systems, clinical AI triage, real-time database architecture, and accessible UI/UX design:
+
+| Member | Role & Track | Core Responsibilities & Contributions | Focus Area |
+| :---: | :--- | :--- | :--- |
+| 👑 | **Panchal Yash**<br>*(Team Lead)* | Overall project architecture & technical execution; backend integration, role-based authentication/authorization, cybersecurity hardening, testing, and deployment pipeline. | Full-Stack & System Architecture |
+| 🤖 | **Princy Prajapati**<br>*(AI/ML Developer)* | Clinical dataset preprocessing, AI/ML model development, evaluation, triage integration, prompt engineering, and ML-assisted backend diagnostic pipelines. | AI / ML & Medical Triage |
+| 🎨 | **Kritika Singh**<br>*(UI/UX & Frontend)* | Figma design systems, interactive prototyping, and responsive PWA frontend development in React & TypeScript with accessibility standards and state synchronization. | UI/UX & PWA Frontend |
+| 🗄️ | **Nensi Parmar**<br>*(Database & Integration)* | PostgreSQL & PostGIS spatial schema design, Prisma ORM modeling, geospatial hospital queries, data integrity constraints, and database security rules. | Spatial DB & Data Pipelines |
+| 📋 | **Himanshu**<br>*(Domain Research & QA)* | Healthcare-domain research, problem-statement requirements analysis, clinical compliance workflows, QA testing matrices, and technical documentation. | Clinical QA & Documentation |
+| 🎯 | **Siddiqui Affan**<br>*(Strategy & Presentation)* | Competition pitch strategy, presentation narrative design, interactive demo storytelling, user journey mapping, and healthcare market analysis. | Pitch Strategy & Demo Experience |
 
 ---
 
