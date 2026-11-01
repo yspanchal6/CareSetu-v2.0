@@ -1,19 +1,20 @@
 # CareSetu — AI-Integrated Healthcare & Emergency Response Platform
 
-<p align="center">
+<p align="center" >
   <a href="https://caresetu.pages.dev/"><img src="https://img.shields.io/badge/Live_Deployment-caresetu.pages.dev-0284c7?style=for-the-badge&logo=cloudflarepages&logoColor=white" alt="Live Demo" /></a>
-  <img src="https://img.shields.io/badge/React-18.3-61dafb?style=for-the-badge&logo=react&logoColor=black" alt="React" />
-  <img src="https://img.shields.io/badge/TypeScript-5.6-3178c6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
-  <img src="https://img.shields.io/badge/Node.js-Express-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js" />
-  <img src="https://img.shields.io/badge/PostgreSQL-PostGIS-4169e1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/React-18.3-61dafb?style=for-the-badge&logo=react" alt="React" />
+  <img src="https://img.shields.io/badge/TypeScript-5.6-3178c6?style=for-the-badge&logo=typescript" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Node.js-Express-339933?style=for-the-badge&logo=node.js" alt="Node.js" />
+  <img src="https://img.shields.io/badge/PostgreSQL-PostGIS-4169e1?style=for-the-badge&logo=postgresql" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/Prisma-ORM-2d3748?style=for-the-badge&logo=prisma&logoColor=white" alt="Prisma" />
-  <img src="https://img.shields.io/badge/Frontend-Cloudflare_Pages-f38020?style=for-the-badge&logo=cloudflare&logoColor=white" alt="Cloudflare Pages" />
+   <img src="https://img.shields.io/badge/Frontend/Hostiing-Cloudflare_Pages-f38020?style=for-the-badge&logo=cloudflare" alt="Cloudflare Pages" />
   <img src="https://img.shields.io/badge/Backend-Render.com-46E3B7?style=for-the-badge&logo=render&logoColor=black" alt="Railway" />
-  <img src="https://img.shields.io/badge/Database-Supabase_PostGIS-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase PostGIS" />
+  <img src="https://img.shields.io/badge/DB-Supabase_PostGIS-3ECF8E?style=for-the-badge&logo=supabase" alt="Supabase PostGIS" />
   <img src="https://img.shields.io/badge/Security-Hardened-emerald?style=for-the-badge" alt="Security Hardened" />
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License" />
 </p>
 
+---
 <p align="center">
   🌐 <strong>Deployed Live Application:</strong> <a href="https://caresetu.pages.dev/"><strong>https://caresetu.pages.dev/</strong></a>
 </p>
@@ -530,7 +531,7 @@ curl -s https://api.caresetu.in/health
 | Member | Role | Responsibility | GitHub Profile |
 |:---:|:---|:---|:---|
 | 👑 | **Yash Panchal** | Team Lead & Full-Stack Architect | [@yspanchal6](https://github.com/yspanchal6) |
-| 💻 | **Frontend Lead** | UI/UX & React PWA Architecture | [@CareSetu-Team](https://github.com/yspanchal6/CareSetu-v2.0) |
+| 💻 | **Frontend Lead** | UI/UX & React PWA Architecture | [@kritika1265](https://github.com/yspanchal6/CareSetu-v2.0) |
 | ⚙️ | **Backend Lead** | API Services & Database Infrastructure | [@CareSetu-Team](https://github.com/yspanchal6/CareSetu-v2.0) |
 | 🤖 | **AI/ML Specialist** | Medical NLP & Symptom Extraction Sidecar | [@CareSetu-Team](https://github.com/yspanchal6/CareSetu-v2.0) |
 | 🩺 | **Healthcare Operations** | Clinical Triage & Safety Rule Compliance | [@CareSetu-Team](https://github.com/yspanchal6/CareSetu-v2.0) |
