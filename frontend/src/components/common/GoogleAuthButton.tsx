@@ -54,7 +54,7 @@ export function GoogleDivider() {
 }
 
 export default function GoogleAuthButton({
-  role = "PATIENT",
+  role,
   isRegistration = false,
   profileData,
   onSuccess,
@@ -131,7 +131,8 @@ export default function GoogleAuthButton({
       }
 
       // 2. Authenticate token with CareSetu backend & establish session
-      const res = await authApi.googleAuth(idToken, role, isRegistration, profileData);
+      const effectiveRole = role ?? (isRegistration ? "PATIENT" : undefined);
+      const res = await authApi.googleAuth(idToken, effectiveRole, isRegistration, profileData);
 
       if (res && res.success && res.user && res.token && res.user.id && res.user.role) {
         // Confirm backend session in AuthContext BEFORE displaying success message
