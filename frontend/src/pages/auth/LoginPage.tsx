@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Input } from "../../components/common/Input";
 import { PasswordInput } from "../../components/common/PasswordInput";
 import Button from "../../components/common/Button";
@@ -12,8 +12,6 @@ import { useTranslation } from "../../i18n/I18nContext";
 
 export default function LoginPage() {
   const { t } = useTranslation();
-  const [searchParams] = useSearchParams();
-  const urlRole = searchParams.get("role")?.toUpperCase();
   const [loginMethod, setLoginMethod] = useState<"password" | "otp">("password");
   const [step, setStep] = useState<"form" | "otp_verify">("form");
   const [email, setEmail] = useState("patient@test.com");
@@ -189,14 +187,14 @@ export default function LoginPage() {
               }
             }}
             aria-label="Return to login form to edit credentials"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-navy focus:outline-none focus:ring-2 focus:ring-sky/30 rounded-lg px-2.5 py-1.5 transition-all active:scale-95 cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-navy dark:hover:text-white dark:text-white focus:outline-none focus:ring-2 focus:ring-sky/30 rounded-lg px-2.5 py-1.5 transition-all active:scale-95 cursor-pointer"
           >
             ← Back
           </button>
         </div>
-        <h2 className="text-2xl font-extrabold text-navy text-center">Verify OTP</h2>
-        <p className="text-sm text-text-secondary text-center mt-1.5 mb-6">
-          We sent a code to <span className="font-semibold text-navy">{email}</span>
+        <h2 className="text-2xl font-extrabold text-navy dark:text-white text-center">Verify OTP</h2>
+        <p className="text-sm text-text-secondary dark:text-slate-400 text-center mt-1.5 mb-6">
+          We sent a code to <span className="font-semibold text-navy dark:text-white">{email}</span>
         </p>
 
         {mockMode && (
@@ -215,7 +213,7 @@ export default function LoginPage() {
           disabled={loading}
         />
 
-        <p className={`text-center text-sm ${otpExpired ? "text-red-600 font-bold" : "text-text-secondary"}`}>
+        <p className={`text-center text-sm ${otpExpired ? "text-red-600 font-bold" : "text-text-secondary dark:text-slate-400"}`}>
           {otpExpired
             ? "OTP expired"
             : `Expires in ${Math.floor(secondsLeft / 60)}:${(secondsLeft % 60).toString().padStart(2, "0")}`}
@@ -246,13 +244,13 @@ export default function LoginPage() {
 
       <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-6 transition-colors">
         <button
-          className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${loginMethod === "password" ? "bg-white dark:bg-slate-900 text-navy dark:text-white shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-navy dark:hover:text-white"}`}
+          className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${loginMethod === "password" ? "bg-white dark:bg-slate-900 text-navy dark:text-white shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-navy dark:hover:text-white dark:text-white dark:hover:text-white"}`}
           onClick={() => setLoginMethod("password")}
         >
           Password
         </button>
         <button
-          className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${loginMethod === "otp" ? "bg-white dark:bg-slate-900 text-navy dark:text-white shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-navy dark:hover:text-white"}`}
+          className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${loginMethod === "otp" ? "bg-white dark:bg-slate-900 text-navy dark:text-white shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-navy dark:hover:text-white dark:text-white dark:hover:text-white"}`}
           onClick={() => setLoginMethod("otp")}
         >
           OTP
@@ -293,9 +291,9 @@ export default function LoginPage() {
 
       {/* OR Divider and Google Auth Button placed BELOW primary login button */}
       <GoogleDivider />
-      <GoogleAuthButton role={urlRole} />
+      <GoogleAuthButton />
 
-      <p className="text-center text-sm text-text-secondary mt-6">
+      <p className="text-center text-sm text-text-secondary dark:text-slate-400 mt-6">
         Don't have an account?{" "}
         <Link to="/role-selection" className="text-sky font-semibold hover:underline">
           Get started
